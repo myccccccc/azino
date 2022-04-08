@@ -54,21 +54,19 @@ namespace storage {
 
         // Add a database entry for "key" to "value" with timestamp "ts".  Returns OK on success,
         // and a non-OK status on error.
-        virtual StorageStatus MVCCPut(const std::string& key, TimeStamp ts, const std::string& value) {
-            auto internal_key = MvccUtils::Convert(key,ts,false);
-            StorageStatus ss = Put(internal_key, value);
-            return ss;
+        virtual StorageStatus MVCCPut(const std::string& key, TimeStamp ts, const std::string& value)  {
+                auto internal_key = InternalKey(key,ts,false);
+                StorageStatus ss = Put(internal_key.Encode(), value);
+                return ss;
         }
-
         // Add a database entry (if any) for "key" with timestamp "ts" to indicate the value is deleted.  Returns OK on
         // success, and a non-OK status on error.  It is not an error if "key"
         // did not exist in the database.
-        virtual StorageStatus MVCCDelete(const std::string& key, TimeStamp ts) {
-            auto internal_key = MvccUtils::Convert(key,ts,true);
-            StorageStatus ss = Put(internal_key, "");
+        virtual StorageStatus MVCCDelete(const std::string &key, TimeStamp ts) {
+            auto internal_key = InternalKey(key, ts, true);
+            StorageStatus ss = Put(internal_key.Encode(), "");
             return ss;
         }
-
         // If the database contains an entry for "key" and has a smaller timestamp, store the
         // corresponding value in value and return OK.
         //
@@ -76,25 +74,26 @@ namespace storage {
         // a status for which Status::IsNotFound() returns true.
         //
         // May return some other Status on an error.
-        virtual StorageStatus MVCCGet(const std::string& key, TimeStamp ts, std::string& value) {
-            auto internal_key = MvccUtils::Convert(key, ts, false);
+        virtual StorageStatus MVCCGet(const std::string& key, TimeStamp ts, std::string& value,TimeStamp &seeked_ts) {
+            auto internal_key = InternalKey(key, ts, false);
             std::string found_key, found_value;
-            StorageStatus ss = Seek(internal_key, found_key, found_value);
+            StorageStatus ss = Seek(internal_key.Encode(), found_key, found_value);
             if (ss.error_code() != StorageStatus::Ok) {
                 return ss;
             } else {
-                auto state = MvccUtils::GetKeyState(internal_key, found_key);
-                if(state == MvccUtils::OK) {
+                auto found_internal_key = InternalKey(found_key);
+                bool isMismatch = (!found_internal_key.Valid()) || (found_internal_key.UserKey() != key);
+                bool isDeleted = found_internal_key.Valid() && found_internal_key.IsDelete();
+                if ((!isMismatch) && (!isDeleted)) {
                     value = found_value;
+                    seeked_ts = found_internal_key.TS();
                     return ss;
                 } else {
                     ss.set_error_code(StorageStatus_Code_NotFound);
-                    if (state == MvccUtils::Mismatch) {
+                    if (isMismatch) {
                         ss.set_error_message("entry not found.");
-                    } else if (state == MvccUtils::Deleted) {
-                        ss.set_error_message("seeked entry indicates the key was deleted.");
                     } else {
-                        ss.set_error_message("unknown state.");
+                        ss.set_error_message("seeked entry indicates the key was deleted.");
                     }
                     return ss;
                 }
