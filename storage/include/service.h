@@ -27,18 +27,21 @@ namespace storage {
                             const ::azino::storage::DeleteRequest* request,
                             ::azino::storage::DeleteResponse* response,
                             ::google::protobuf::Closure* done) override;
+
         virtual void MVCCPut(::google::protobuf::RpcController* controller,
                              const ::azino::storage::MVCCPutRequest* request,
                              ::azino::storage::MVCCPutResponse* response,
-                             ::google::protobuf::Closure* done)override;
+                             ::google::protobuf::Closure* done) override;
+
         virtual void MVCCGet(::google::protobuf::RpcController* controller,
                              const ::azino::storage::MVCCGetRequest* request,
                              ::azino::storage::MVCCGetResponse* response,
-                             ::google::protobuf::Closure* done)override;
+                             ::google::protobuf::Closure* done) override;
+
         virtual void MVCCDelete(::google::protobuf::RpcController* controller,
                                 const ::azino::storage::MVCCDeleteRequest* request,
                                 ::azino::storage::MVCCDeleteResponse* response,
-                                ::google::protobuf::Closure* done)override;
+                                ::google::protobuf::Closure* done) override;
 
     private:
         std::unique_ptr<Storage> _storage;

@@ -5,11 +5,9 @@
 #include "storage.h"
 #include "utils.h"
 
-azino::storage::Storage* storage;
-
 class DBImplTest : public testing::Test {
 public:
-
+    azino::storage::Storage* storage;
 protected:
     void SetUp() {
         storage = azino::storage::Storage::DefaultStorage();
@@ -18,11 +16,26 @@ protected:
     void TearDown() {
         leveldb::Options opt;
         leveldb::DestroyDB("TestDB", opt);
+        delete storage;
     }
 };
 
 TEST_F(DBImplTest, crud) {
+    ASSERT_TRUE(storage->Put("hello", "world").error_code() == azino::storage::StorageStatus_Code_Ok);
+    std::string s;
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Get("hello", s).error_code());
+    ASSERT_EQ("world", s);
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("hello").error_code());
+    ASSERT_EQ(azino::storage::StorageStatus_Code_NotFound, storage->Get("hello", s).error_code());
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Put("de", "ll").error_code());
+    delete storage;
+    storage = azino::storage::Storage::DefaultStorage();
+    storage->Open("TestDB");
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Get("de", s).error_code());
+    ASSERT_EQ("ll", s);
+}
 
+TEST_F(DBImplTest, mvcc) {
     std::string seeked_key,seeked_value;
     uint64_t seeked_ts;
 
@@ -42,9 +55,6 @@ TEST_F(DBImplTest, crud) {
     ASSERT_EQ(seeked_value,"1234");
     ASSERT_EQ(seeked_ts,15);
 
-
-
-
     ASSERT_TRUE(storage->Seek("seek",seeked_key,seeked_value).error_code()==azino::storage::StorageStatus_Code_NotFound);
     ASSERT_TRUE(storage->Put("seek1", "world1").error_code() == azino::storage::StorageStatus_Code_Ok);
     ASSERT_TRUE(storage->Seek("seek",seeked_key,seeked_value).error_code()==azino::storage::StorageStatus_Code_Ok);
@@ -58,18 +68,4 @@ TEST_F(DBImplTest, crud) {
     ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("seek").error_code());
     ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("seek1").error_code());
     ASSERT_TRUE(storage->Seek("seek",seeked_key,seeked_value).error_code()==azino::storage::StorageStatus_Code_NotFound);
-
-    ASSERT_TRUE(storage->Put("hello", "world").error_code() == azino::storage::StorageStatus_Code_Ok);
-    std::string s;
-    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Get("hello", s).error_code());
-    ASSERT_EQ("world", s);
-    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("hello").error_code());
-    ASSERT_EQ(azino::storage::StorageStatus_Code_NotFound, storage->Get("hello", s).error_code());
-    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Put("de", "ll").error_code());
-    delete storage;
-    storage = azino::storage::Storage::DefaultStorage();
-    storage->Open("TestDB");
-    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Get("de", s).error_code());
-    ASSERT_EQ("ll", s);
-    delete storage;
 }

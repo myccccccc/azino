@@ -1,59 +1,63 @@
-//
-// Created by os on 4/6/22.
-//
-
 #ifndef AZINO_STORAGE_INCLUDE_UTILS_H
 #define AZINO_STORAGE_INCLUDE_UTILS_H
+
 #include "storage.h"
+#include "azino/kv.h"
+
 namespace azino {
-    namespace storage {
-        class MvccUtils{
-        private:
-            constexpr static char *format="MVCCKEY_%s_%016lx_%c";
-            constexpr static int format_common_suffix_length = 18;//the common suffix's length, include timestamp and delete tag
-        public:
-            enum KeyState{
-                Mismatch,
-                Deleted,
-                OK
-            };
+namespace storage {
 
-            //return the state of found_key, if state is ok, store found_key's timestamp in ts
-            static KeyState Decode(const std::string &origin_key,const int internal_key_length,const std::string &found_key,uint64_t &ts){
-                if(internal_key_length!=found_key.length()){
-                    return Mismatch;
-                }
+    class InternalKey {
+    public:
+        InternalKey(const std::string &user_key, TimeStamp ts, bool is_delete)
+            : _user_key(user_key), _ts(ts), _is_delete(is_delete), _valid(true) {}
+        InternalKey(const std::string &internal_key)
+            : _user_key(), _ts(), _is_delete(), _valid() {} // decode here
+        std::string Encode() const;
+        bool IsDelete() const;
+        std::string UserKey() const;
+        TimeStamp TS() const;
+        bool Valid() const;
+    private:
+        const std::string _user_key;
+        const TimeStamp _ts;
+        const bool _is_delete;
+        const bool _valid; // set to false if decode error
+    };
 
-                std::unique_ptr<char[]> buffer( new char[internal_key_length+1]);
-                uint64_t buf_ts;
-                uint64_t buf_is_deleted;
-                if(3!=sscanf(found_key.data(),format,buffer.get(),&buf_ts,&buf_is_deleted)){
-                    return Mismatch;
-                }
-                if(strcmp(buffer.get(),origin_key.data()) != 0){
-                    return Mismatch;
-                }
-                if(buf_is_deleted!='0'){
-                    return Deleted;
-                }
-                ts = ~buf_ts;
-                return OK;
-            }
-            static std::string Encode(const std::string &key, uint64_t ts, bool is_deleted) {
-
-                static int key_len = strlen(format) + format_common_suffix_length;
-
-                char *buffer = new char[key.length() + key_len];
-                sprintf(buffer, format, key.data(), ~ts,
-                        is_deleted ? '1' : '0');//need to inverse timestamp because leveldb's seek find the bigger one
-                auto ans = std::string(buffer);
-                delete[]buffer;
-                return ans;
-            }
-
-
-
+    class MvccUtils{
+    private:
+        constexpr static const char *format = "MVCCKEY_%s_%016lx_%c";
+        static const int format_common_suffix_length = 18; // the common suffix's length, include timestamp and delete tag
+        static const int key_len = strlen(format) + format_common_suffix_length;
+    public:
+        enum KeyState {
+            Mismatch,
+            Deleted,
+            OK
         };
-    }
-}
-#endif //AZINO_STORAGE_INCLUDE_UTILS_H
+
+        static KeyState GetKeyState(const std::string &internal_key, const std::string &found_key) {
+            if(internal_key.length() != found_key.length()
+                    || found_key.compare(0, found_key.length()-format_common_suffix_length,
+                        internal_key, 0, internal_key.length()-format_common_suffix_length)) {
+                return Mismatch;
+            } else {
+                if (found_key[found_key.size()-1]=='1') return Deleted;
+                else return OK;
+            }
+        }
+
+        static std::string Convert(const std::string &key, TimeStamp ts, bool is_delete) {
+            char *buffer = new char[key.length() + key_len];
+            sprintf(buffer, format, key.data(), ~ts,
+                    is_delete ? '1' : '0'); // need to inverse timestamp because leveldb's seek find the bigger one
+            auto ans = std::string(buffer);
+            delete []buffer;
+            return ans;
+        }
+    };
+} // namespace storage
+} // namespace azino
+
+#endif // AZINO_STORAGE_INCLUDE_UTILS_H

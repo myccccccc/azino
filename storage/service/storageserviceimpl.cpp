@@ -22,8 +22,6 @@ namespace storage {
                      const ::azino::storage::PutRequest* request,
                      ::azino::storage::PutResponse* response,
                      ::google::protobuf::Closure* done) {
-        // This object helps you to call done->Run() in RAII style. If you need
-        // to process the request asynchronously, pass done_guard.release().
         brpc::ClosureGuard done_guard(done);
         brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
@@ -93,12 +91,12 @@ namespace storage {
             StorageStatus *ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
             LOG(WARNING) << cntl->remote_side() << " Fail to put mvcc key: " << request->key()
-                         <<" ts: "<<request->ts()
+                         << " ts: " <<request->ts()
                          << " error code: " << ss.error_code()
                          << " value: " << request->value() << " error message: " << ss.error_message();
         } else {
             LOG(INFO) << cntl->remote_side() << " Success to put mvcc key: " << request->key()
-                      <<" ts: "<<request->ts()
+                      << " ts: " <<request->ts()
                       << " value: " << request->value();
         }
     }
@@ -121,7 +119,7 @@ namespace storage {
                          << " error message: " << ss.error_message();
         } else {
             LOG(INFO) << cntl->remote_side() << " Success to get mvcc key: " << request->key()
-                      <<" ts: "<<request->ts()
+                      << " ts: " <<request->ts()
                       << " value: " << value;
             response->set_value(value);
             response->set_ts(ts);
@@ -140,12 +138,12 @@ namespace storage {
             StorageStatus* ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
             LOG(WARNING) << cntl->remote_side() << " Fail to delete mvcc key: " << request->key()
-                         << " ts: "<<request->ts()
+                         << " ts: " <<request->ts()
                          << " error code: " << ss.error_code()
                          << " error message: " << ss.error_message();
         } else {
             LOG(INFO) << cntl->remote_side() << " Success to delete mvcc key: " << request->key()
-                      <<" ts: "<<request->ts();
+                      << " ts: " <<request->ts();
         }
     }
 
