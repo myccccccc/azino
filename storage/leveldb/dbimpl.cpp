@@ -122,7 +122,7 @@ namespace {
         // and a non-OK status on error.
         StorageStatus MVCCPut(const std::string& key,uint64_t ts,
                                       const std::string& value) override{
-            auto internal_key = MvccUtils::Convert(key,ts,false);
+            auto internal_key = MvccUtils::Encode(key, ts, false);
             StorageStatus ss = Put(internal_key, value);
             return ss;
         }
@@ -131,7 +131,7 @@ namespace {
         // success, and a non-OK status on error.  It is not an error if "key"
         // did not exist in the database.
         StorageStatus MVCCDelete(const std::string& key,uint64_t ts) override{
-            auto internal_key = MvccUtils::Convert(key,ts,true);
+            auto internal_key = MvccUtils::Encode(key, ts, true);
             StorageStatus ss = Put(internal_key, "");
             return ss;
         }
@@ -144,18 +144,16 @@ namespace {
         //
         // May return some other Status on an error.
         StorageStatus MVCCGet(const std::string& key,uint64_t ts,
-                                      std::string& value) override{
-            auto internal_key = MvccUtils::Convert(key, ts, false);
+                                      std::string& value,uint64_t& seeked_ts) override{
+            auto internal_key = MvccUtils::Encode(key, ts, false);
 
-
-            std::string found_key,found_value;
-            StorageStatus ss = Seek(internal_key,found_key,found_value);
+            std::string found_key;
+            StorageStatus ss = Seek(internal_key,found_key,value);
             if (ss.error_code() != StorageStatus::Ok) {
                 return ss;
             } else {
-                auto state = MvccUtils::GetKeyState(internal_key,found_key);
+                auto state = MvccUtils::Decode(key,internal_key.length(),found_key,seeked_ts);
                 if(state == MvccUtils::OK){
-                    value = found_value;
                     return ss;
                 }else{
                     ss.set_error_code(StorageStatus_Code_NotFound);

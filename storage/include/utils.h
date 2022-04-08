@@ -17,25 +17,35 @@ namespace azino {
                 Deleted,
                 OK
             };
-            static KeyState GetKeyState(const std::string&internal_key,const std::string &found_key){
 
-                if(internal_key.length()!=found_key.length()||
-                    found_key.compare(0,found_key.length()-format_common_suffix_length,internal_key,0,internal_key.length()-format_common_suffix_length)){
+            //return the state of found_key, if state is ok, store found_key's timestamp in ts
+            static KeyState Decode(const std::string &origin_key,const int internal_key_length,const std::string &found_key,uint64_t &ts){
+                if(internal_key_length!=found_key.length()){
                     return Mismatch;
-                }else{
-                    if(found_key[found_key.size()-1]=='1')return Deleted;
-                    else{
-                        return OK;
-                    }
                 }
+
+                std::unique_ptr<char[]> buffer( new char[internal_key_length+1]);
+                uint64_t buf_ts;
+                uint64_t buf_is_deleted;
+                if(3!=sscanf(found_key.data(),format,buffer.get(),&buf_ts,&buf_is_deleted)){
+                    return Mismatch;
+                }
+                if(strcmp(buffer.get(),origin_key.data()) != 0){
+                    return Mismatch;
+                }
+                if(buf_is_deleted!='0'){
+                    return Deleted;
+                }
+                ts = ~buf_ts;
+                return OK;
             }
-            static std::string Convert(const std::string &key,uint64_t ts,bool is_delete) {
+            static std::string Encode(const std::string &key, uint64_t ts, bool is_deleted) {
 
                 static int key_len = strlen(format) + format_common_suffix_length;
 
                 char *buffer = new char[key.length() + key_len];
                 sprintf(buffer, format, key.data(), ~ts,
-                        is_delete ? '1' : '0');//need to inverse timestamp because leveldb's seek find the bigger one
+                        is_deleted ? '1' : '0');//need to inverse timestamp because leveldb's seek find the bigger one
                 auto ans = std::string(buffer);
                 delete[]buffer;
                 return ans;

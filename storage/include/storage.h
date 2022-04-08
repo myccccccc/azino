@@ -68,7 +68,7 @@ namespace storage {
         //
         // May return some other Status on an error.
         virtual StorageStatus MVCCGet(const std::string& key,uint64_t ts,
-                                  std::string& value) = 0;
+                                  std::string& value,uint64_t &seeked_ts) = 0;
 
 
     };

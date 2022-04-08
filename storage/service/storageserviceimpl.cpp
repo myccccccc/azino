@@ -110,7 +110,8 @@ namespace storage {
         brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
         std::string value;
-        StorageStatus ss = _storage->MVCCGet(request->key(), request->ts(),value);
+        uint64_t ts;
+        StorageStatus ss = _storage->MVCCGet(request->key(), request->ts(),value,ts);
         if (ss.error_code() != StorageStatus::Ok) {
             StorageStatus* ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
@@ -123,6 +124,7 @@ namespace storage {
                       <<" ts: "<<request->ts()
                       << " value: " << value;
             response->set_value(value);
+            response->set_ts(ts);
         }
     }
 
