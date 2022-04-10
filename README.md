@@ -1,9 +1,9 @@
 [![ci](https://github.com/myccccccc/azino/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/myccccccc/azino/actions/workflows/build.yml)
 
 ---
-# What is Azino
+# What is Azino?
 
-# How to set up your dev environment？
+# How to set up your dev environment?
 ```bash
 git clone --recurse-submodules https://github.com/myccccccc/azino.git
 cd azino
