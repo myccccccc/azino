@@ -1,5 +1,5 @@
 name: ci
-on: [push, pull_request]
+on: [pull_request]
 
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
         compiler: [gcc]
         os: [ubuntu-18.04]
         build_tool: [cmake]
-        with_test: [false, true]
+        with_test: [true, false]
     steps:
     - uses: actions/checkout@v2
       with:
