@@ -1,63 +1,77 @@
-//
-// Created by os on 4/8/22.
-//
 #include <cstring>
-#include <memory>
+#include <cassert>
+
 #include "utils.h"
 
 namespace azino {
-    namespace storage {
-        std::string InternalKey::Encode() const {
-            static int key_len = strlen(format) + format_common_suffix_length;
-            char *buffer = new char[_user_key.length() + key_len];
-            sprintf(buffer, format, _user_key.data(), ~_ts,
-                    _is_delete ? '1' : '0'); // need to inverse timestamp because leveldb's seek find the bigger one
-            auto ans = std::string(buffer);
-            delete[]buffer;
-            return ans;
-        }
+namespace storage {
+    std::string InternalKey::Encode() const {
+        char *buf = new char[strlen(format_prefix) + _user_key.length() + ts_length + delete_tag_length + 1]();
+        char *index = buf;
 
-        bool InternalKey::Valid() const {
-            return _valid;
-        }
+        strcpy(buf, format_prefix);
+        index += strlen(format_prefix);
 
-        bool InternalKey::IsDelete() const {
-            return _is_delete;
-        }
+        unsigned n = sprintf(index, format_user_key, _user_key.data());
+        index += n;
+        assert(n == _user_key.length());
 
-        std::string InternalKey::UserKey() const {
-            return _user_key;
-        }
+        n = sprintf(index, format_ts, ~_ts); // need to inverse timestamp because leveldb's seek find the bigger one
+        index += n;
+        assert(n == ts_length);
 
-        TimeStamp InternalKey::TS() const {
-            return _ts;
-        }
+        n = sprintf(index, format_delete_tag, _is_delete ? '1' : '0');
+        index += n;
+        assert(n == delete_tag_length);
 
-        void InternalKey::decode(const std::string &internal_key) {
-            if (internal_key.length() <= format_common_suffix_length) {
-                _valid = false;
-                return;
-            }
-            std::unique_ptr<char[]> buf_in(new char[internal_key.length() + 1]);
-            std::unique_ptr<char[]> buf_out(new char[internal_key.length() + 1]);
-            strcpy(buf_in.get(), internal_key.data());
-            buf_in[internal_key.length() - format_common_suffix_length] = 0;
-            buf_in[internal_key.length()] = 0;
-            if (sscanf(buf_in.get(), format_prefix, buf_out.get()) != 1) {
-                _valid = false;
-                return;
-            }
-            char buf_is_deleted;
-            TimeStamp buf_ts;
-            if (sscanf(buf_in.get() + internal_key.length() - format_common_suffix_length + 1, format_suffix, &buf_ts,
-                       &buf_is_deleted) != 2) {
-                _valid = false;
-                return;
-            }
-            _valid = true;
-            _user_key = std::string(buf_out.get());
-            _is_delete = buf_is_deleted != '0';
-            _ts = ~buf_ts;
-        }
+        auto ans = std::string(buf);
+        delete []buf;
+        return ans;
     }
-}
+
+    bool InternalKey::Valid() const {
+        return _valid;
+    }
+
+    bool InternalKey::IsDelete() const {
+        return _is_delete;
+    }
+
+    std::string InternalKey::UserKey() const {
+        return _user_key;
+    }
+
+    TimeStamp InternalKey::TS() const {
+        return _ts;
+    }
+
+    void InternalKey::decode(const std::string &internal_key) {
+        if (internal_key.length() < strlen(format_prefix) + ts_length + delete_tag_length) {
+            _valid = false;
+            return;
+        }
+        auto user_key_length = internal_key.length() - (strlen(format_prefix) + ts_length + delete_tag_length);
+        TimeStamp buf_ts;
+        char buf_delete_tag;
+        char *buf_user_key = new char[user_key_length + 1]();
+
+        auto index = internal_key.data();
+        index += strlen(format_prefix);
+
+        strncpy(buf_user_key, index, user_key_length);
+        index += user_key_length;
+
+        sscanf(index, format_ts, &buf_ts);
+        index += ts_length;
+
+        sscanf(index, format_delete_tag, &buf_delete_tag);
+        index += delete_tag_length;
+
+        _valid = true;
+        _user_key = std::string(buf_user_key);
+        delete []buf_user_key;
+        _is_delete = buf_delete_tag != '0';
+        _ts = ~buf_ts;
+    }
+} // namespace storage
+} // namespace azino

@@ -54,10 +54,10 @@ namespace storage {
 
         // Add a database entry for "key" to "value" with timestamp "ts".  Returns OK on success,
         // and a non-OK status on error.
-        virtual StorageStatus MVCCPut(const std::string& key, TimeStamp ts, const std::string& value)  {
-                auto internal_key = InternalKey(key,ts,false);
-                StorageStatus ss = Put(internal_key.Encode(), value);
-                return ss;
+        virtual StorageStatus MVCCPut(const std::string &key, TimeStamp ts, const std::string& value) {
+            auto internal_key = InternalKey(key, ts, false);
+            StorageStatus ss = Put(internal_key.Encode(), value);
+            return ss;
         }
         // Add a database entry (if any) for "key" with timestamp "ts" to indicate the value is deleted.  Returns OK on
         // success, and a non-OK status on error.  It is not an error if "key"
@@ -74,7 +74,7 @@ namespace storage {
         // a status for which Status::IsNotFound() returns true.
         //
         // May return some other Status on an error.
-        virtual StorageStatus MVCCGet(const std::string& key, TimeStamp ts, std::string& value,TimeStamp &seeked_ts) {
+        virtual StorageStatus MVCCGet(const std::string& key, TimeStamp ts, std::string &value, TimeStamp &seeked_ts) {
             auto internal_key = InternalKey(key, ts, false);
             std::string found_key, found_value;
             StorageStatus ss = Seek(internal_key.Encode(), found_key, found_value);
@@ -91,9 +91,9 @@ namespace storage {
                 } else {
                     ss.set_error_code(StorageStatus_Code_NotFound);
                     if (isMismatch) {
-                        ss.set_error_message("entry not found.");
+                        ss.set_error_message("Entry not found.");
                     } else {
-                        ss.set_error_message("seeked entry indicates the key was deleted.");
+                        ss.set_error_message("Seeked entry indicates the key was deleted.");
                     }
                     return ss;
                 }
