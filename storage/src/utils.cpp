@@ -1,5 +1,6 @@
 #include <cstring>
 #include <cassert>
+#include <memory>
 
 #include "utils.h"
 
@@ -50,26 +51,35 @@ namespace storage {
             _valid = false;
             return;
         }
+        if (internal_key.compare(0, strlen(format_prefix), format_prefix, strlen(format_prefix))) {
+            _valid = false;
+            return;
+        }
         auto user_key_length = internal_key.length() - (strlen(format_prefix) + ts_length + delete_tag_length);
         TimeStamp buf_ts;
         char buf_delete_tag;
-        char *buf_user_key = new char[user_key_length + 1]();
+        std::unique_ptr<char []> buf_user_key( new char[user_key_length + 1]());
 
         auto index = internal_key.data();
         index += strlen(format_prefix);
 
-        strncpy(buf_user_key, index, user_key_length);
+        strncpy(buf_user_key.get(), index, user_key_length);
         index += user_key_length;
 
-        sscanf(index, format_ts, &buf_ts);
+        if (1 != sscanf(index, format_ts, &buf_ts)) {
+            _valid = false;
+            return;
+        }
         index += ts_length;
 
-        sscanf(index, format_delete_tag, &buf_delete_tag);
+        if (1 != sscanf(index, format_delete_tag, &buf_delete_tag)) {
+            _valid = false;
+            return;
+        }
         index += delete_tag_length;
 
         _valid = true;
-        _user_key = std::string(buf_user_key);
-        delete []buf_user_key;
+        _user_key = std::string(buf_user_key.get());
         _is_delete = buf_delete_tag != '0';
         _ts = ~buf_ts;
     }
