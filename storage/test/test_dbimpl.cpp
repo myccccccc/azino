@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <leveldb/db.h>
 #include <string>
+#include "service/kv.pb.h"
 
 #include "storage.h"
 #include "utils.h"
@@ -68,4 +69,35 @@ TEST_F(DBImplTest, mvcc) {
     ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("seek").error_code());
     ASSERT_EQ(azino::storage::StorageStatus_Code_Ok, storage->Delete("seek1").error_code());
     ASSERT_TRUE(storage->Seek("seek",seeked_key,seeked_value).error_code()==azino::storage::StorageStatus_Code_NotFound);
+}
+
+
+TEST_F(DBImplTest, mvccbatch) {
+
+    azino::Value v0,v1,v2;
+    v0.set_content("123");
+    v0.set_is_delete(false);
+    v1.set_content("234");
+    v1.set_is_delete(false);
+    v2.set_is_delete(true);
+    std::vector<std::tuple<std::string,azino::TimeStamp,azino::Value>> kvs{
+            {"233",5,v0},
+            {"233",10,v1},
+            {"233",15,v2}
+    };
+    ASSERT_EQ(storage->MVCCBatchStore(kvs).error_code(),azino::storage::StorageStatus_Code_Ok);
+    std::string seeked_value;
+    azino::TimeStamp ts;
+    ASSERT_EQ(storage->MVCCGet("233",0,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
+
+    ASSERT_EQ(storage->MVCCGet("233",6,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(ts,5);
+    ASSERT_EQ(seeked_value,"123");
+
+    ASSERT_EQ(storage->MVCCGet("234",11,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
+    ASSERT_EQ(storage->MVCCGet("233",11,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(ts,10);
+    ASSERT_EQ(seeked_value,"234");
+
+    ASSERT_EQ(storage->MVCCGet("233",16,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
 }
