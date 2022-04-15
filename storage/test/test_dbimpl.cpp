@@ -74,30 +74,40 @@ TEST_F(DBImplTest, mvcc) {
 
 TEST_F(DBImplTest, mvccbatch) {
 
-    azino::Value v0,v1,v2;
-    v0.set_content("123");
-    v0.set_is_delete(false);
-    v1.set_content("234");
-    v1.set_is_delete(false);
-    v2.set_is_delete(true);
-    std::vector<std::tuple<std::string,azino::TimeStamp,azino::Value>> kvs{
-            {"233",5,v0},
-            {"233",10,v1},
-            {"233",15,v2}
+    ::google::protobuf::RepeatedPtrField<::azino::storage::MVCCStoreData> datas;
+
+    auto *v0 = new azino::Value(), *v1 = new azino::Value(), *v2 = new azino::Value();
+    v0->set_content("123");
+    v0->set_is_delete(false);
+    v1->set_content("234");
+    v1->set_is_delete(false);
+    v2->set_is_delete(true);
+    std::vector<std::tuple<std::string, azino::TimeStamp, azino::Value *>> kvs{
+            {"233", 5,  v0},
+            {"233", 10, v1},
+            {"233", 15, v2}
     };
-    ASSERT_EQ(storage->MVCCBatchStore(kvs).error_code(),azino::storage::StorageStatus_Code_Ok);
+    for (auto &tp: kvs) {
+        auto *d = new azino::storage::MVCCStoreData();
+        d->set_key(std::get<0>(tp));
+        d->set_ts(std::get<1>(tp));
+        d->set_allocated_value(std::get<2>(tp));
+        datas.AddAllocated(d);
+    }
+
+    ASSERT_EQ(storage->MVCCBatchStore(datas).error_code(), azino::storage::StorageStatus_Code_Ok);
     std::string seeked_value;
     azino::TimeStamp ts;
-    ASSERT_EQ(storage->MVCCGet("233",0,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
+    ASSERT_EQ(storage->MVCCGet("233", 0, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_NotFound);
 
-    ASSERT_EQ(storage->MVCCGet("233",6,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_Ok);
-    ASSERT_EQ(ts,5);
-    ASSERT_EQ(seeked_value,"123");
+    ASSERT_EQ(storage->MVCCGet("233", 6, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(ts, 5);
+    ASSERT_EQ(seeked_value, "123");
 
-    ASSERT_EQ(storage->MVCCGet("234",11,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
-    ASSERT_EQ(storage->MVCCGet("233",11,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_Ok);
-    ASSERT_EQ(ts,10);
-    ASSERT_EQ(seeked_value,"234");
+    ASSERT_EQ(storage->MVCCGet("234", 11, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_NotFound);
+    ASSERT_EQ(storage->MVCCGet("233", 11, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(ts, 10);
+    ASSERT_EQ(seeked_value, "234");
 
-    ASSERT_EQ(storage->MVCCGet("233",16,seeked_value,ts).error_code(),azino::storage::StorageStatus_Code_NotFound);
+    ASSERT_EQ(storage->MVCCGet("233", 16, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_NotFound);
 }

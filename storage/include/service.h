@@ -43,6 +43,11 @@ namespace storage {
                                 ::azino::storage::MVCCDeleteResponse* response,
                                 ::google::protobuf::Closure* done) override;
 
+        virtual void MVCCBatchStore(::google::protobuf::RpcController* controller,
+                            const ::azino::storage::MVCCBatchStoreRequest* request,
+                            ::azino::storage::MVCCBatchStoreResponse* response,
+                            ::google::protobuf::Closure* done) override;
+
     private:
         std::unique_ptr<Storage> _storage;
     };

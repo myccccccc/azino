@@ -54,7 +54,7 @@ namespace storage {
 
         // Add a series of database entries for "key" to "value" with timestamp "ts" and tag "is_delete".  Returns OK on success,
         // and a non-OK status on error.
-        virtual StorageStatus MVCCBatchStore(const std::vector<std::tuple<std::string, TimeStamp, Value>> &tvs) =0;
+        virtual StorageStatus MVCCBatchStore(const ::google::protobuf::RepeatedPtrField< ::azino::storage::MVCCStoreData > &datas) =0;
         // Add a database entry for "key" to "value" with timestamp "ts".  Returns OK on success,
         // and a non-OK status on error.
 

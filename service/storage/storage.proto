@@ -1,6 +1,8 @@
 syntax="proto2";
 package azino.storage;
 
+import "service/kv.proto";
+
 option cc_generic_services = true;
 
 // needs to be consistent with the storage/include/status.h
@@ -73,6 +75,21 @@ message MVCCDeleteResponse {
   optional StorageStatus status = 1;
 };
 
+message MVCCStoreData{
+  optional string key = 1;
+  optional uint64 ts = 2;
+  optional Value value = 3;
+
+}
+
+message MVCCBatchStoreRequest{
+  repeated MVCCStoreData datas = 1;
+};
+
+message MVCCBatchStoreResponse {
+  optional StorageStatus status = 1;
+};
+
 service StorageService {
   rpc Put(PutRequest) returns (PutResponse);
   rpc Get(GetRequest) returns (GetResponse);
@@ -80,4 +97,5 @@ service StorageService {
   rpc MVCCPut(MVCCPutRequest) returns (MVCCPutResponse);
   rpc MVCCGet(MVCCGetRequest) returns (MVCCGetResponse);
   rpc MVCCDelete(MVCCDeleteRequest) returns (MVCCDeleteResponse);
+  rpc MVCCBatchStore(MVCCBatchStoreRequest) returns (MVCCBatchStoreResponse);
 };
