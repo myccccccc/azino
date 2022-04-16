@@ -6,6 +6,7 @@
 #include <memory>
 #include <unordered_map>
 #include <bthread/bthread.h>
+#include "persistor.h"
 
 #include "index.h"
 
@@ -340,6 +341,13 @@ public:
         return sts;
     }
 
+    virtual bool Persist(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
+        return false;
+    }
+
+    virtual bool ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
+        return false;
+    }
 private:
     /*butil::FlatMap<UserKey, std::unique_ptr<MVCCValue>> _kvs;
     butil::FlatMap<UserKey, std::vector<std::function<void()>>> _blocked_ops;*/
@@ -380,6 +388,13 @@ public:
         return _kvbs[bucket_num]->Read(key, v, txid, callback);
     }
 
+    virtual bool Persist(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
+        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->Persist(bucket_id, datas);
+    }
+
+    virtual bool ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
+        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->ClearPersisted(bucket_id, kts);
+    }
 private:
     std::vector<std::shared_ptr<KVBucket>> _kvbs;
 };

@@ -4,6 +4,7 @@
 #include "azino/kv.h"
 #include "service/tx.pb.h"
 #include "service/kv.pb.h"
+#include "persistor.h"
 
 #include <functional>
 
@@ -43,6 +44,10 @@ namespace txindex {
         // read will be blocked if there exists and intent who has a smaller ts than read's ts.
         // read will bypass any lock, and return the key value pair who has the biggest ts among all that have ts smaller than read's ts.
         virtual TxOpStatus Read(const UserKey& key, Value& v, const TxIdentifier& txid, std::function<void()> callback) = 0;
+
+        virtual bool Persist(uint32_t bucket_id, std::vector<DataToPersist> &datas) = 0;
+
+        virtual bool ClearPersisted(uint32_t bucket_id, const std::vector<std::pair<UserKey, TimeStamp>> &kts) = 0;
     };
 } // namespace txindex
 } // namespace azino
