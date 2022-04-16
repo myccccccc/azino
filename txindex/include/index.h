@@ -4,12 +4,12 @@
 #include "azino/kv.h"
 #include "service/tx.pb.h"
 #include "service/kv.pb.h"
-#include "persistor.h"
 
 #include <functional>
 
 namespace azino {
 namespace txindex {
+    struct DataToPersist;
     class TxIndex {
     public:
         // return the default index impl
@@ -45,9 +45,14 @@ namespace txindex {
         // read will bypass any lock, and return the key value pair who has the biggest ts among all that have ts smaller than read's ts.
         virtual TxOpStatus Read(const UserKey& key, Value& v, const TxIdentifier& txid, std::function<void()> callback) = 0;
 
-        virtual bool Persist(uint32_t bucket_id, std::vector<DataToPersist> &datas) = 0;
+        virtual TxOpStatus GetPersisting(uint32_t bucket_id, std::vector<DataToPersist> &datas) = 0;
 
-        virtual bool ClearPersisted(uint32_t bucket_id, const std::vector<std::pair<UserKey, TimeStamp>> &kts) = 0;
+        virtual TxOpStatus ClearPersisted(uint32_t bucket_id, const std::vector<std::pair<UserKey, TimeStamp>> &kts) = 0;
+    };
+    struct DataToPersist {
+        UserKey key;
+        TimeStamp maxTs;
+        std::vector<std::pair<TimeStamp, Value *>> tvs;//Values are copied from origin and stored in heap
     };
 } // namespace txindex
 } // namespace azino

@@ -341,12 +341,16 @@ public:
         return sts;
     }
 
-    virtual bool Persist(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
-        return false;
+    virtual TxOpStatus GetPersisting(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
+        std::lock_guard<bthread::Mutex> lck(_latch);
+
+
     }
 
-    virtual bool ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
-        return false;
+    virtual TxOpStatus ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
+        std::lock_guard<bthread::Mutex> lck(_latch);
+
+
     }
 private:
     /*butil::FlatMap<UserKey, std::unique_ptr<MVCCValue>> _kvs;
@@ -359,7 +363,7 @@ private:
 class TxIndexImpl : public txindex::TxIndex {
 public:
     TxIndexImpl() :
-    _kvbs(FLAGS_latch_bucket_num, std::make_shared<KVBucket>()) { }
+    _kvbs(FLAGS_latch_bucket_num, std::make_shared<KVBucket>()), _persistor(this, FLAGS_latch_bucket_num) { }
     DISALLOW_COPY_AND_ASSIGN(TxIndexImpl);
     ~TxIndexImpl() = default;
 
@@ -388,15 +392,16 @@ public:
         return _kvbs[bucket_num]->Read(key, v, txid, callback);
     }
 
-    virtual bool Persist(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
-        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->Persist(bucket_id, datas);
+    virtual TxOpStatus GetPersisting(uint32_t bucket_id, std::vector<txindex::DataToPersist> &datas) override{
+        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->GetPersisting(bucket_id, datas);
     }
 
-    virtual bool ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
+    virtual TxOpStatus ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
         return _kvbs[bucket_id % FLAGS_latch_bucket_num]->ClearPersisted(bucket_id, kts);
     }
 private:
     std::vector<std::shared_ptr<KVBucket>> _kvbs;
+    txindex::Persistor _persistor;
 };
 
 } // namespace
