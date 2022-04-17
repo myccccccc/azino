@@ -419,7 +419,7 @@ class TxIndexImpl : public txindex::TxIndex {
 public:
     TxIndexImpl() :
     _kvbs(FLAGS_latch_bucket_num), _persistor(this, FLAGS_latch_bucket_num) {
-        for(auto &it:_kvbs){
+        for (auto &it: _kvbs) {
             it.reset(new KVBucket());
         }
     }
