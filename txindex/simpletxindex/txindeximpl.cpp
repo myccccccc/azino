@@ -351,7 +351,11 @@ private:
 class TxIndexImpl : public txindex::TxIndex {
 public:
     TxIndexImpl() :
-    _kvbs(FLAGS_latch_bucket_num, std::make_shared<KVBucket>()) { }
+    _kvbs(FLAGS_latch_bucket_num) {
+        for (auto &it: _kvbs) {
+            it.reset(new KVBucket());
+        }
+    }
     DISALLOW_COPY_AND_ASSIGN(TxIndexImpl);
     ~TxIndexImpl() = default;
 
