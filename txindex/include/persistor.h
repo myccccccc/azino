@@ -66,7 +66,12 @@ namespace azino {
                 return code;
             }
 
-            void Persist() {
+
+
+        private:
+
+            void persist() {
+
                 std::vector<DataToPersist> datas;
                 auto status = _txindex->GetPersisting(_current_bucket, datas);
                 _current_bucket = (_current_bucket + 1) % _bucket_num;
@@ -80,7 +85,6 @@ namespace azino {
 
             }
 
-        private:
             static void *excute(void *args) {
                 auto p = (Persistor *) args;
                 while (true) {
@@ -89,7 +93,7 @@ namespace azino {
                     if(p->_bid != bthread_self()){
                         break;
                     }
-                    p->Persist();
+                    p->persist();
                 }
 
             }
