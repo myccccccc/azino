@@ -36,9 +36,7 @@ namespace azino {
 
             DISALLOW_COPY_AND_ASSIGN(Persistor);
 
-            ~Persistor() {
-                Stop();
-            }
+            ~Persistor() = default;
 
             //Start a new thread and monitor the data. GetPersisting data periodically. Return 0 if success.
             int Start() {
@@ -49,14 +47,22 @@ namespace azino {
                 return bthread_start_background(&_bid, &BTHREAD_ATTR_NORMAL, excute, this);
             }
 
-            //Stop monitor thread. Will be called when destruct. Return 0 if success.
+            //Stop monitor thread. Need call first before the monitoring data destroy. Return 0 if success.
             int Stop() {
-                std::lock_guard<bthread::Mutex> lck(_mutex);
-                if (_bid == 0) {
-                    return -1;
+
+                bthread_t bid;
+
+                {
+                    std::lock_guard<bthread::Mutex> lck(_mutex);
+                    if (_bid == 0) {
+                        return -1;
+                    }
+                    bid = _bid;
+                    _bid = 0;
                 }
-                auto code = bthread_stop(_bid);
-                _bid = 0;
+
+
+                auto code = bthread_stop(bid);
                 return code;
             }
 
@@ -67,8 +73,8 @@ namespace azino {
                 if (TxOpStatus_Code_Ok != status.error_code()) {
 
                 } else {
+                    LOG(INFO) << "persist num: "<<datas.size();
                     if (datas.size() > 0) {
-
                     }
                 }
 
@@ -79,6 +85,10 @@ namespace azino {
                 auto p = (Persistor *) args;
                 while (true) {
                     bthread_usleep(FLAGS_persist_period * 1000);
+                    std::lock_guard<bthread::Mutex> lck(p->_mutex);
+                    if(p->_bid != bthread_self()){
+                        break;
+                    }
                     p->Persist();
                 }
 

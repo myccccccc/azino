@@ -422,9 +422,12 @@ public:
         for (auto &it: _kvbs) {
             it.reset(new KVBucket());
         }
+        _persistor.Start();
     }
     DISALLOW_COPY_AND_ASSIGN(TxIndexImpl);
-    ~TxIndexImpl() = default;
+    ~TxIndexImpl() {
+        _persistor.Stop();
+    }
 
     virtual TxOpStatus WriteLock(const UserKey& key, const TxIdentifier& txid, std::function<void()> callback) override {
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;

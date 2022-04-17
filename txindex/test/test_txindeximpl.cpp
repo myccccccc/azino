@@ -270,3 +270,43 @@ TEST_F(TxIndexImplTest, persist) {
 
     ASSERT_EQ(ti->Read(k1, v1, t2, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
 }
+
+TEST_F(TxIndexImplTest, persist_periodically) {
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->WriteIntent(k1, v1, t1).error_code());
+    t1.set_commit_ts(3);
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
+
+    t2.set_start_ts(4);
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteLock(k2, t2, std::bind(&TxIndexImplTest::dummyCallback, this)).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->WriteIntent(k2, v2, t2).error_code());
+    t2.set_commit_ts(5);
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k2, t2).error_code());
+
+
+    ASSERT_EQ(ti->Read(k1, v1, t2, NULL).error_code(), azino::TxOpStatus_Code_Ok);
+
+    std::vector<azino::txindex::DataToPersist> datas;
+    auto b1 = butil::Hash(k1) % 1024;
+    auto b2 = butil::Hash(k2) % 1024;
+
+    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(datas.size(), (b1 == b2)? 2:1);
+    std::vector<std::pair<azino::UserKey, azino::TimeStamp>> kts;
+    kts.clear();
+    for (auto &x: datas) {
+        kts.push_back({x.key, x.maxTs});
+    }
+    datas.clear();
+    ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_ClearRepeat);
+    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(datas.size(), 0);
+
+
+    ASSERT_EQ(ti->Read(k1, v1, t2, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
+
+    LOG(INFO).flush();
+    LOG(ERROR).flush();
+    bthread_usleep(20*1000*1000);
+}
