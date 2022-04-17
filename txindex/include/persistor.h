@@ -52,7 +52,7 @@ namespace azino {
 
                 bthread_t bid;
 
-                {
+                {// reset _bid, if the bthread wake up and found a different _bid, it will exit.
                     std::lock_guard<bthread::Mutex> lck(_mutex);
                     if (_bid == 0) {
                         return -1;
@@ -69,7 +69,9 @@ namespace azino {
 
         private:
 
-            //need hold _mutex before call this func
+            //Need hold _mutex before call this func.
+            //If _txindex want to destruct itself, it needs call Stop() and hold _mutex first,
+            //therefore if persist is called, it can make sure to access _txindex's data.
             void persist() {
 
                 std::vector<DataToPersist> datas;
@@ -102,7 +104,7 @@ namespace azino {
                         _stub->MVCCBatchStore(&cntl, &req, &resp, NULL);
 
                         if (cntl.Failed()) {
-                            LOG(ERROR) << cntl.ErrorText();//maybe network failure, sleep
+                            LOG(ERROR) << cntl.ErrorText();//maybe network failure, sleep.
                             return;
                         } else {
                             if (resp.status().error_code() != storage::StorageStatus_Code_Ok) {
@@ -129,13 +131,13 @@ namespace azino {
                 auto p = (Persistor *) args;
                 while (true) {
                     bthread_usleep(FLAGS_persist_period * 1000);
-                    std::lock_guard<bthread::Mutex> lck(p->_mutex);
+                    std::lock_guard<bthread::Mutex> lck(p->_mutex);// hold the _mutex when persist data.
                     if (p->_bid != bthread_self()) {
                         break;
                     }
                     p->persist();
                 }
-
+                return nullptr;
             }
 
 
