@@ -159,11 +159,11 @@ namespace storage {
         if (ss.error_code() != StorageStatus::Ok) {
             StorageStatus *ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
-            LOG(WARNING) << cntl->remote_side() << " Fail to batch store mvcc data "
+            LOG(WARNING) << cntl->remote_side() << " Fail to batch store mvcc data. "
                          << " error code: " << ss.error_code()
                          << " data size: " << request->datas().size() << " error message: " << ss.error_message();
         } else {
-            LOG(INFO) << cntl->remote_side() << " Success to batch store mvcc data "
+            LOG(INFO) << cntl->remote_side() << " Success to batch store mvcc data. "
                       << " data size: " << request->datas().size();
         }
     }

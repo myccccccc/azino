@@ -1,9 +1,10 @@
 #include <gtest/gtest.h>
 #include <butil/hash.h>
 #include <bthread/bthread.h>
-
+#include <brpc/channel.h>
 #include <gflags/gflags.h>
 #include "index.h"
+#include "service/storage/storage.pb.h"
 
 class TxIndexImplTest : public testing::Test {
 public:
@@ -259,12 +260,15 @@ TEST_F(TxIndexImplTest, persist) {
     std::vector<std::pair<azino::UserKey, azino::TimeStamp>> kts;
     kts.clear();
     for (auto &x: datas) {
+        for (auto &v: x.tvs) {
+            delete v.second;
+        }
         kts.push_back({x.key, x.maxTs});
     }
     datas.clear();
     ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_Ok);
     ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_ClearRepeat);
-    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
     ASSERT_EQ(datas.size(), 0);
 
 
@@ -295,12 +299,15 @@ TEST_F(TxIndexImplTest, persist_periodically) {
     std::vector<std::pair<azino::UserKey, azino::TimeStamp>> kts;
     kts.clear();
     for (auto &x: datas) {
+        for (auto &v: x.tvs) {
+            delete v.second;
+        }
         kts.push_back({x.key, x.maxTs});
     }
     datas.clear();
     ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_Ok);
     ASSERT_EQ(ti->ClearPersisted(b1, kts).error_code(), azino::TxOpStatus_Code_ClearRepeat);
-    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
     ASSERT_EQ(datas.size(), 0);
 
 
@@ -308,5 +315,37 @@ TEST_F(TxIndexImplTest, persist_periodically) {
 
     LOG(INFO).flush();
     LOG(ERROR).flush();
-    bthread_usleep(20*1000*1000);
+    t2.set_start_ts(10);
+    ASSERT_EQ(ti->Read(k2, v2, t2, NULL).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(ti->GetPersisting(b2, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(datas.size(), 1);
+    for(auto &x: datas){
+        for(auto &y: x.tvs){
+            delete y.second;
+        }
+    }
+
+    brpc::Channel _channel;
+    brpc::ChannelOptions option;
+    if (_channel.Init("0.0.0.0:8000", "", &option) != 0) {
+        LOG(ERROR) << "Fail to initialize channel";
+        return;
+    }
+
+    azino::storage::StorageService_Stub _stub(&_channel);
+    azino::storage::MVCCBatchStoreResponse resp;
+    azino::storage::MVCCBatchStoreRequest req;
+    brpc::Controller cntl;
+    _stub.MVCCBatchStore(&cntl, &req, &resp, NULL);
+    if (cntl.Failed()) {
+        LOG(ERROR) << cntl.ErrorText();
+        return;
+    }
+    LOG(INFO) << "Success connect to storage server. ";
+
+
+    bthread_usleep(15*1000*1000);
+
+    ASSERT_EQ(ti->GetPersisting(b2, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
+    ASSERT_EQ(ti->Read(k2, v2, t2, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
 }

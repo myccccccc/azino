@@ -369,7 +369,11 @@ public:
             datas.push_back(d);
         }
         TxOpStatus sts;
-        sts.set_error_code(TxOpStatus_Code_Ok);
+        if (cnt == 0) {
+            sts.set_error_code(TxOpStatus_Code_NoneToPersist);
+        } else {
+            sts.set_error_code(TxOpStatus_Code_Ok);
+        }
         std::stringstream ss;
         ss << " Get data to persist success. "
            << " Persist key num: " << datas.size()
