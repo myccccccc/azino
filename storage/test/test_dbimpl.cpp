@@ -74,7 +74,7 @@ TEST_F(DBImplTest, mvcc) {
 
 TEST_F(DBImplTest, mvccbatch) {
 
-    ::google::protobuf::RepeatedPtrField<::azino::storage::MVCCStoreData> datas;
+    std::vector<azino::storage::Storage::Data> datas;
 
     auto *v0 = new azino::Value(), *v1 = new azino::Value(), *v2 = new azino::Value();
     v0->set_content("123");
@@ -88,14 +88,11 @@ TEST_F(DBImplTest, mvccbatch) {
             {"233", 15, v2}
     };
     for (auto &tp: kvs) {
-        auto *d = new azino::storage::MVCCStoreData();
-        d->set_key(std::get<0>(tp));
-        d->set_ts(std::get<1>(tp));
-        d->set_allocated_value(std::get<2>(tp));
-        datas.AddAllocated(d);
+        datas.push_back(
+                {&std::get<0>(tp), &std::get<2>(tp)->content(), std::get<1>(tp), std::get<2>(tp)->is_delete()});
     }
 
-    ASSERT_EQ(storage->MVCCBatchStore(datas).error_code(), azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(storage->BatchStore(datas).error_code(), azino::storage::StorageStatus_Code_Ok);
     std::string seeked_value;
     azino::TimeStamp ts;
     ASSERT_EQ(storage->MVCCGet("233", 0, seeked_value, ts).error_code(), azino::storage::StorageStatus_Code_NotFound);

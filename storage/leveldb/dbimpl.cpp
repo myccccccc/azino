@@ -53,7 +53,7 @@ namespace {
         }
 
 
-        virtual StorageStatus MVCCBatchStore(const ::google::protobuf::RepeatedPtrField< ::azino::storage::MVCCStoreData > &datas) override {
+        virtual StorageStatus BatchStore(const std::vector<Data> &datas)  override {
             if (_leveldbptr == nullptr) {
                 StorageStatus ss;
                 ss.set_error_code(StorageStatus::InvalidArgument);
@@ -65,10 +65,9 @@ namespace {
             leveldb::Status leveldbstatus;
             leveldb::WriteBatch batch;
 
-            for(int i = 0; i < datas.size(); i++) {
-                auto & data = datas.Get(i);
-                InternalKey key(data.key(), data.ts(), data.value().is_delete());
-                batch.Put(key.Encode(), data.value().content());
+            for (auto &data : datas) {
+                InternalKey key(*data.key, data.ts, data.is_delete);
+                batch.Put(key.Encode(), *data.value);
             }
             leveldbstatus = _leveldbptr->Write(opts, &batch);
             return LevelDBStatus(leveldbstatus);

@@ -52,9 +52,15 @@ namespace storage {
         // May return some other Status on an error.
         virtual StorageStatus Seek(const std::string &key,std::string &found_key,std::string &value) = 0;
 
+        struct Data {
+            const std::string *key;
+            const std::string *value;
+            TimeStamp ts;
+            bool is_delete;
+        };
         // Add a series of database entries for "key" to "value" with timestamp "ts" and tag "is_delete".  Returns OK on success,
         // and a non-OK status on error.
-        virtual StorageStatus MVCCBatchStore(const ::google::protobuf::RepeatedPtrField< ::azino::storage::MVCCStoreData > &datas) =0;
+        virtual StorageStatus BatchStore(const std::vector<Data> &datas) =0;
         // Add a database entry for "key" to "value" with timestamp "ts".  Returns OK on success,
         // and a non-OK status on error.
 

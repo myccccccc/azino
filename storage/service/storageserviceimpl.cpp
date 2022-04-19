@@ -147,15 +147,20 @@ namespace storage {
         }
     }
 
-    void StorageServiceImpl::MVCCBatchStore(::google::protobuf::RpcController* controller,
-                                const ::azino::storage::MVCCBatchStoreRequest* request,
-                                ::azino::storage::MVCCBatchStoreResponse* response,
+    void StorageServiceImpl::BatchStore(::google::protobuf::RpcController* controller,
+                                const ::azino::storage::BatchStoreRequest* request,
+                                ::azino::storage::BatchStoreResponse* response,
                                 ::google::protobuf::Closure* done) {
 
         brpc::ClosureGuard done_guard(done);
         brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-        StorageStatus ss = _storage->MVCCBatchStore(request->datas());
+        std::vector<Storage::Data>datas;
+        datas.reserve(request->datas_size());
+        for (auto &d: request->datas()) {
+            datas.push_back({&d.key(), &d.value().content(), d.ts(), d.value().is_delete()});
+        }
+        StorageStatus ss = _storage->BatchStore(datas);
         if (ss.error_code() != StorageStatus::Ok) {
             StorageStatus *ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);

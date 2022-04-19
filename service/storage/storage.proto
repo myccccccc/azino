@@ -75,18 +75,18 @@ message MVCCDeleteResponse {
   optional StorageStatus status = 1;
 };
 
-message MVCCStoreData{
+message StoreData{
   optional string key = 1;
   optional uint64 ts = 2;
   optional Value value = 3;
 
 }
 
-message MVCCBatchStoreRequest{
-  repeated MVCCStoreData datas = 1;
+message BatchStoreRequest{
+  repeated StoreData datas = 1;
 };
 
-message MVCCBatchStoreResponse {
+message BatchStoreResponse {
   optional StorageStatus status = 1;
 };
 
@@ -97,5 +97,5 @@ service StorageService {
   rpc MVCCPut(MVCCPutRequest) returns (MVCCPutResponse);
   rpc MVCCGet(MVCCGetRequest) returns (MVCCGetResponse);
   rpc MVCCDelete(MVCCDeleteRequest) returns (MVCCDeleteResponse);
-  rpc MVCCBatchStore(MVCCBatchStoreRequest) returns (MVCCBatchStoreResponse);
+  rpc BatchStore(BatchStoreRequest) returns (BatchStoreResponse);
 };

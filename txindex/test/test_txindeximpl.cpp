@@ -333,10 +333,10 @@ TEST_F(TxIndexImplTest, persist_periodically) {
     }
 
     azino::storage::StorageService_Stub _stub(&_channel);
-    azino::storage::MVCCBatchStoreResponse resp;
-    azino::storage::MVCCBatchStoreRequest req;
+    azino::storage::BatchStoreResponse resp;
+    azino::storage::BatchStoreRequest req;
     brpc::Controller cntl;
-    _stub.MVCCBatchStore(&cntl, &req, &resp, NULL);
+    _stub.BatchStore(&cntl, &req, &resp, NULL);
     if (cntl.Failed()) {
         LOG(ERROR) << cntl.ErrorText();
         return;

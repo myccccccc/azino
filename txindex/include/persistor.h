@@ -1,6 +1,3 @@
-//
-// Created by os on 4/15/22.
-//
 #include <butil/macros.h>
 #include <gflags/gflags.h>
 #include "bthread/bthread.h"
@@ -87,13 +84,13 @@ namespace azino {
                         assert(!datas.empty());
 
                         brpc::Controller cntl;
-                        azino::storage::MVCCBatchStoreRequest req;
-                        azino::storage::MVCCBatchStoreResponse resp;
+                        azino::storage::BatchStoreRequest req;
+                        azino::storage::BatchStoreResponse resp;
 
                         for (auto &kv: datas) {
                             assert(!kv.tvs.empty());
                             for (auto &tv: kv.tvs) {
-                                azino::storage::MVCCStoreData *d = req.add_datas();
+                                azino::storage::StoreData *d = req.add_datas();
                                 d->set_ts(tv.first);
                                 d->set_key(kv.key);
                                 //req take over the "value *" and will free the memory later
@@ -101,7 +98,7 @@ namespace azino {
                             }
                         }
 
-                        _stub->MVCCBatchStore(&cntl, &req, &resp, NULL);
+                        _stub->BatchStore(&cntl, &req, &resp, NULL);
 
                         if (cntl.Failed()) {
                             LOG(ERROR) << cntl.ErrorText();//maybe network failure, sleep.
