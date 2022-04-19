@@ -47,12 +47,11 @@ namespace txindex {
 
         virtual TxOpStatus GetPersisting(uint32_t bucket_id, std::vector<DataToPersist> &datas) = 0;
 
-        virtual TxOpStatus ClearPersisted(uint32_t bucket_id, const std::vector<std::pair<UserKey, TimeStamp>> &kts) = 0;
+        virtual TxOpStatus ClearPersisted(uint32_t bucket_id, const std::vector<DataToPersist> &datas) = 0;
     };
     struct DataToPersist {
         UserKey key;
-        TimeStamp maxTs;
-        std::vector<std::pair<TimeStamp, Value *>> tvs;//Values are copied from origin and stored in heap
+        std::vector<std::pair<TimeStamp, Value *>> tvs;//Values are copied from origin and stored in heap, and ordered by ts descending
     };
 } // namespace txindex
 } // namespace azino

@@ -109,12 +109,7 @@ namespace azino {
                                 << "Fail to batch store mvcc data, error code: " << resp.status().error_code()
                                 << " error msg: " << resp.status().error_message();
                             } else {
-                                std::vector<std::pair<UserKey, TimeStamp>> kts;
-                                kts.reserve(datas.size());
-                                for (auto &kv: datas) {
-                                    kts.emplace_back(kv.key, kv.maxTs);
-                                }
-                                _txindex->ClearPersisted(current_bucket, kts);
+                                _txindex->ClearPersisted(current_bucket, datas);
                                 // log will be printed by _txindex
                             }
                             return;

@@ -52,12 +52,12 @@ public:
         return std::make_pair(iter->first, iter->second.get());
     }
 
-    // truncate committed values whose timestamp is smaller than "ts", return if has value meet condition
-    bool Truncate(TimeStamp ts) {
-        auto it = _t2v.upper_bound(ts);
-        bool ans = it != _t2v.begin();
-        _t2v.erase(_t2v.begin(), _t2v.end());
-        return ans;
+    // Truncate committed values whose timestamp is smaller or equal than "ts", return the number of values truncated
+    int Truncate(TimeStamp ts) {
+        auto iter = _t2v.lower_bound(ts);
+        auto ans = _t2v.size();
+        _t2v.erase(iter, _t2v.end());
+        return ans - _t2v.size();
     }
 
 private:
@@ -358,11 +358,7 @@ public:
                 continue;
             }
             auto d = txindex::DataToPersist{.key = std::string(it.first)};
-            d.maxTs = MIN_TIMESTAMP;
             for (auto &x: it.second->_t2v) {
-                if (x.first > d.maxTs) {
-                    d.maxTs = x.first;
-                }
                 d.tvs.push_back({x.first, new Value(*x.second)});
                 cnt++;
             }
@@ -383,26 +379,27 @@ public:
         return sts;
     }
 
-    virtual TxOpStatus ClearPersisted(uint32_t bucket_id, const std::vector<std::pair<UserKey, TimeStamp>> &kts) override {
+    virtual TxOpStatus ClearPersisted(uint32_t bucket_id, const std::vector<txindex::DataToPersist> &datas) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
         sts.set_error_code(TxOpStatus_Code_Ok);
         std::stringstream ss;
-        for (auto &it: kts) {
-            if (_kvs.find(it.first) == _kvs.end()) {
+        for (auto &it: datas) {
+            assert(!it.tvs.empty());
+            if (_kvs.empty() || _kvs.find(it.key) == _kvs.end()) {
                 sts.set_error_code(TxOpStatus_Code_ClearRepeat);
-                ss << " UserKey: " << it.first
+                ss << " UserKey: " << it.key
                    << " repeat clear due to no key in _kvs.\n";
-            } else if (!_kvs[it.first]->Truncate(it.second)) {
+            } else if (datas.size() != _kvs[it.key]->Truncate(it.tvs.begin()->first)) {
                 sts.set_error_code(TxOpStatus_Code_ClearRepeat);
-                ss << " UserKey: " << it.first
-                   << " repeat clear due to Truncate() return false.\n";
+                ss << " UserKey: " << it.key
+                   << " repeat clear due to truncate number not match.\n";
             }
         }
         if (sts.error_code() == TxOpStatus_Code_Ok) {
             ss << " Clear persisted data success. "
-               << " Key num: " << kts.size();
+               << " Key num: " << datas.size();
             sts.set_error_message(ss.str());
             LOG(INFO) << ss.str();
         } else {
@@ -462,8 +459,8 @@ public:
         return _kvbs[bucket_id % FLAGS_latch_bucket_num]->GetPersisting(bucket_id, datas);
     }
 
-    virtual TxOpStatus ClearPersisted(uint32_t bucket_id,const std::vector<std::pair<UserKey,TimeStamp>> &kts) override{
-        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->ClearPersisted(bucket_id, kts);
+    virtual TxOpStatus ClearPersisted(uint32_t bucket_id,const std::vector<txindex::DataToPersist> &datas) override{
+        return _kvbs[bucket_id % FLAGS_latch_bucket_num]->ClearPersisted(bucket_id, datas);
     }
 private:
     std::vector<std::shared_ptr<KVBucket>> _kvbs;
