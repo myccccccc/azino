@@ -4,8 +4,11 @@
 #include "azino/kv.h"
 #include "service/tx.pb.h"
 #include "service/kv.pb.h"
+#include "gflags/gflags.h"
 
 #include <functional>
+
+DECLARE_int32(latch_bucket_num);
 
 namespace azino {
 namespace txindex {

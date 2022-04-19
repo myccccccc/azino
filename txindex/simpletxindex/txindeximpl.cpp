@@ -391,7 +391,7 @@ public:
                 sts.set_error_code(TxOpStatus_Code_ClearRepeat);
                 ss << " UserKey: " << it.key
                    << " repeat clear due to no key in _kvs.\n";
-            } else if (datas.size() != _kvs[it.key]->Truncate(it.tvs.begin()->first)) {
+            } else if (it.tvs.size() != _kvs[it.key]->Truncate(it.tvs.begin()->first)) {
                 sts.set_error_code(TxOpStatus_Code_ClearRepeat);
                 ss << " UserKey: " << it.key
                    << " repeat clear due to truncate number not match.\n";
@@ -423,11 +423,15 @@ public:
         for (auto &it: _kvbs) {
             it.reset(new KVBucket());
         }
-        _persistor.Start();
+        if(FLAGS_enable_persistor){
+            _persistor.Start();
+        }
     }
     DISALLOW_COPY_AND_ASSIGN(TxIndexImpl);
     ~TxIndexImpl() {
-        _persistor.Stop();
+        if(FLAGS_enable_persistor){
+            _persistor.Stop();
+        }
     }
 
     virtual TxOpStatus WriteLock(const UserKey& key, const TxIdentifier& txid, std::function<void()> callback) override {

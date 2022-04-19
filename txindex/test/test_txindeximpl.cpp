@@ -2,7 +2,7 @@
 #include <butil/hash.h>
 #include <bthread/bthread.h>
 #include <brpc/channel.h>
-#include <gflags/gflags.h>
+#include "persistor.h"
 #include "index.h"
 #include "service/storage/storage.pb.h"
 
@@ -44,6 +44,7 @@ public:
 protected:
     void SetUp() {
         UnCalled();
+        FLAGS_enable_persistor = false;
         ti = azino::txindex::TxIndex::DefaultTxIndex();
         t1.set_start_ts(1);
         t2.set_start_ts(2);
@@ -237,75 +238,40 @@ TEST_F(TxIndexImplTest, read_not_exist) {
 }
 
 
-TEST_F(TxIndexImplTest, persist_periodically) {
+TEST_F(TxIndexImplTest, persist) {
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->WriteIntent(k1, v1, t1).error_code());
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
-
     t2.set_start_ts(4);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteLock(k2, t2, std::bind(&TxIndexImplTest::dummyCallback, this)).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->WriteIntent(k2, v2, t2).error_code());
+              ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this)).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->WriteIntent(k1, v2, t2).error_code());
     t2.set_commit_ts(5);
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k2, t2).error_code());
-
-
-    ASSERT_EQ(ti->Read(k1, v1, t2, NULL).error_code(), azino::TxOpStatus_Code_Ok);
-
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
+    azino::Value read_value;
+    azino::TxIdentifier read_tx_3;
+    read_tx_3.set_start_ts(3);
+    azino::TxIdentifier read_tx_6;
+    read_tx_6.set_start_ts(6);
+    ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(v1.content(), read_value.content());
+    ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(v2.content(), read_value.content());
     std::vector<azino::txindex::DataToPersist> datas;
-    auto b1 = butil::Hash(k1) % 1024;
-    auto b2 = butil::Hash(k2) % 1024;
-
-    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(datas.size(), (b1 == b2)? 2:1);
-
+    auto bucket_num = butil::Hash(k1) % FLAGS_latch_bucket_num;
+    ASSERT_EQ(ti->GetPersisting(bucket_num, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(datas.size(), 1);
+    ASSERT_EQ(datas[0].tvs.size(), 2);
     for (auto &x: datas) {
         for (auto &v: x.tvs) {
             delete v.second;
         }
     }
-    ASSERT_EQ(ti->ClearPersisted(b1, datas).error_code(), azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(ti->ClearPersisted(b1, datas).error_code(), azino::TxOpStatus_Code_ClearRepeat);
+    ASSERT_EQ(ti->ClearPersisted(bucket_num, datas).error_code(), azino::TxOpStatus_Code_Ok);
+    ASSERT_EQ(ti->ClearPersisted(bucket_num, datas).error_code(), azino::TxOpStatus_Code_ClearRepeat);
     datas.clear();
-    ASSERT_EQ(ti->GetPersisting(b1, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
+    ASSERT_EQ(ti->GetPersisting(bucket_num, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
     ASSERT_EQ(datas.size(), 0);
-
-
-    ASSERT_EQ(ti->Read(k1, v1, t2, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
-
-    LOG(INFO).flush();
-    LOG(ERROR).flush();
-    t2.set_start_ts(10);
-    ASSERT_EQ(ti->Read(k2, v2, t2, NULL).error_code(), azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(ti->GetPersisting(b2, datas).error_code(), azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(datas.size(), 1);
-    for(auto &x: datas){
-        for(auto &y: x.tvs){
-            delete y.second;
-        }
-    }
-
-    brpc::Channel _channel;
-    brpc::ChannelOptions option;
-    if (_channel.Init("0.0.0.0:8000", "", &option) != 0) {
-        LOG(ERROR) << "Fail to initialize channel";
-        return;
-    }
-
-    azino::storage::StorageService_Stub _stub(&_channel);
-    azino::storage::BatchStoreResponse resp;
-    azino::storage::BatchStoreRequest req;
-    brpc::Controller cntl;
-    _stub.BatchStore(&cntl, &req, &resp, NULL);
-    if (cntl.Failed()) {
-        LOG(ERROR) << cntl.ErrorText();
-        return;
-    }
-    LOG(INFO) << "Success connect to storage server. ";
-
-
-    bthread_usleep(15*1000*1000);
-
-    ASSERT_EQ(ti->GetPersisting(b2, datas).error_code(), azino::TxOpStatus_Code_NoneToPersist);
-    ASSERT_EQ(ti->Read(k2, v2, t2, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
+    ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
+    ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL).error_code(), azino::TxOpStatus_Code_ReadNotExist);
 }
