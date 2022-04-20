@@ -6,8 +6,6 @@
 #include "index.h"
 #include "service/storage/storage.pb.h"
 
-DECLARE_bool(enable_persistor);
-
 class TxIndexImplTest : public testing::Test {
 public:
     TxIndexImplTest() {
@@ -25,13 +23,17 @@ public:
 
     void dummyCallback() {
         LOG(INFO) << "Calling dummy call back.";
+        bthread_mutex_lock(&_m);
         bthread_cond_signal(&_cv);
+        _called = true;
+        bthread_mutex_unlock(&_m);
     }
 
     void waitDummyCallback() {
         bthread_mutex_lock(&_m);
-        bthread_cond_wait(&_cv, &_m);
-        _called = true;
+        while (!_called) {
+            bthread_cond_wait(&_cv, &_m);
+        }
         bthread_mutex_unlock(&_m);
     }
 
@@ -46,8 +48,7 @@ public:
 protected:
     void SetUp() {
         UnCalled();
-        FLAGS_enable_persistor = false;
-        ti = azino::txindex::TxIndex::DefaultTxIndex("");
+        ti = azino::txindex::TxIndex::DefaultTxIndex("127.0.0.1:1080"); //  A dummy address
         t1.set_start_ts(1);
         t2.set_start_ts(2);
         v1.set_content("tx1value");
