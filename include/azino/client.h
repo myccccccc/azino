@@ -37,16 +37,6 @@ namespace azino {
         Status Delete(const WriteOptions& options, const UserKey& key);
         
     private:
-        class Channel {
-        public:
-            Channel();
-            Channel(const std::string& s, brpc::Channel* c);
-            std::string serverAddr() { return _serverAddr; }
-            brpc::Channel* get() { return _brpcChannel.get(); }
-        private:
-            std::string _serverAddr;
-            std::unique_ptr<brpc::Channel> _brpcChannel;
-        };
 
         Status Write(const WriteOptions& options, const UserKey& key, bool is_delete, const UserValue& value = "");
         Status PreputAll();
@@ -54,9 +44,9 @@ namespace azino {
         Status AbortAll();
         std::unique_ptr<Options> _options;
         std::unique_ptr<brpc::ChannelOptions> _channel_options;
-        Channel _txplanner;
-        Channel _storage;
-        std::vector<Channel> _txindexs;
+        std::unique_ptr<brpc::Channel> _txplanner;
+        std::unique_ptr<brpc::Channel> _storage;
+        std::vector<std::unique_ptr<brpc::Channel>> _txindexs;
         std::unique_ptr<TxIdentifier> _txid;
         std::unique_ptr<TxWriteBuffer> _txwritebuffer;
     };

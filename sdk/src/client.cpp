@@ -12,9 +12,6 @@ namespace azino {
 DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
 DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
 
-    Transaction::Channel::Channel() : Channel("", nullptr) {}
-    Transaction::Channel::Channel(const std::string &s, brpc::Channel *c) : _serverAddr(s), _brpcChannel(c) {}
-
     Transaction::Transaction(const Options& options, const std::string& txplanner_addr)
     : _options(new Options(options)),
       _channel_options(new brpc::ChannelOptions),
@@ -27,7 +24,7 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
         if (channel->Init(txplanner_addr.c_str(), _channel_options.get()) != 0) {
             LOG(ERROR) << "Fail to initialize channel: " << txplanner_addr;
         }
-        _txplanner = Channel(txplanner_addr, channel);
+        _txplanner.reset(channel);
     }
 
     Transaction::~Transaction() = default;
@@ -67,14 +64,14 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
         if (channel->Init(resp.storage_addr().c_str(), _channel_options.get()) != 0) {
             LOG(ERROR) << "Fail to initialize channel: " << resp.storage_addr();
         }
-        _storage = Channel(resp.storage_addr(), channel);
+        _storage.reset(channel);
 
         for (int i = 0; i < resp.txindex_addrs_size(); i++) {
             auto* txindex_channel = new brpc::Channel();
             if (txindex_channel->Init(resp.txindex_addrs(i).c_str(), _channel_options.get()) != 0) {
                 LOG(ERROR) << "Fail to initialize channel: " << resp.txindex_addrs(i);
             }
-            _txindexs.emplace_back(resp.txindex_addrs(i), txindex_channel);
+            _txindexs.emplace_back(channel);
         }
 
         return Status::Ok(ss.str());
