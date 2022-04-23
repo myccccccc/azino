@@ -368,6 +368,11 @@ public:
         }
         if (cnt == 0) {
             sts.set_error_code(TxOpStatus_Code_NoneToPersist);
+            ss << "Get data to persist fail. "
+               << "Persist key num: " << datas.size()
+               << "Persist value num: " << cnt;
+            sts.set_error_message(ss.str());
+            LOG(INFO) << ss.str();
         } else {
             sts.set_error_code(TxOpStatus_Code_Ok);
             ss << "Get data to persist success. "

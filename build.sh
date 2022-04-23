@@ -12,7 +12,7 @@ rc=0
 rm -rf tmp.sqPg7ubHww && rm -rf build && rm -rf cmake-build-debug- && \
 mkdir build && cd build && cmake .. && make -j$(nproc) && cd .. && \
 rm -rf output && mkdir -p output/test && \
-find ./build | grep -E '(txindex_server|txplanner_server|azino_client)$' | xargs -i cp {} output && \
+find ./build | grep -E '(txindex_server|txplanner_server|storage_server|azino_client)$' | xargs -i cp {} output && \
 find ./build | grep -E '(test_[^\.]+)$' | xargs -i cp {} output/test && \
 cp run_all_tests.sh output/test
 rc=$?

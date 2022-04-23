@@ -26,6 +26,9 @@ namespace azino {
         Status static NotSupportedErr(const std::string& s = "") {
             return Status(kNotSupportedErr, s);
         }
+        Status static StorageErr(const std::string& s = "") {
+            return Status(kStorageErr, s);
+        }
         bool IsOk() {
             return _error_code == kOk;
         }
@@ -43,6 +46,9 @@ namespace azino {
         }
         bool IsNotSupportedErr() {
             return _error_code == kNotSupportedErr;
+        }
+        bool IsStorageErr() {
+            return _error_code == kStorageErr;
         }
         std::string ToString() {
             std::stringstream ss;
@@ -66,6 +72,9 @@ namespace azino {
                 case kNotSupportedErr:
                     code_message = "NotSupportedError. ";
                     break;
+                case kStorageErr:
+                    code_message = "StorageError. ";
+                    break;
             }
             ss << code_message << _error_message;
             return ss.str();
@@ -77,7 +86,8 @@ namespace azino {
             kNetworkErr = 2,
             kIllegalTxOp = 3,
             kTxIndexErr = 4,
-            kNotSupportedErr = 5
+            kStorageErr = 5,
+            kNotSupportedErr = 6
         };
         Status(Code c, const std::string& s)
         : _error_code(c),

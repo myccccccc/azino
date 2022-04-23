@@ -6,6 +6,7 @@
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 #include "service/txindex/txindex.pb.h"
+#include "service/storage/storage.pb.h"
 
 namespace azino {
 
@@ -71,7 +72,7 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
             if (txindex_channel->Init(resp.txindex_addrs(i).c_str(), _channel_options.get()) != 0) {
                 LOG(ERROR) << "Fail to initialize channel: " << resp.txindex_addrs(i);
             }
-            _txindexs.emplace_back(channel);
+            _txindexs.emplace_back(txindex_channel);
         }
 
         return Status::Ok(ss.str());
@@ -378,12 +379,46 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
             case TxOpStatus_Code_ReadNotExist:
                 ss << " fail. ";
                 LOG(INFO) << ss.str();
-                // todo: go check storage
-                return Status::NotFound(ss.str());
+                goto readStorage;
             default:
                 ss << " fail. ";
                 LOG(ERROR) << ss.str();
                 return Status::TxIndexErr(ss.str());
+        }
+        
+        readStorage:
+        azino::storage::StorageService_Stub storage_stub(_storage.get());
+        brpc::Controller storage_cntl;
+        azino::storage::MVCCGetRequest storage_req;
+        storage_req.set_key(key);
+        storage_req.set_ts(_txid->start_ts());
+        azino::storage::MVCCGetResponse storage_resp;
+        storage_stub.MVCCGet(&storage_cntl, &storage_req, &storage_resp, nullptr);
+        std::stringstream storage_ss;
+        if (storage_cntl.Failed()) {
+            storage_ss << "Controller failed error code: " << storage_cntl.ErrorCode() << " error text: " << storage_cntl.ErrorText();
+            LOG(WARNING) << storage_ss.str();
+            return Status::NetworkErr(storage_ss.str());
+        }
+        storage_ss << "sdk: " << storage_cntl.local_side() << " Read from storage: " << storage_cntl.remote_side() << std::endl
+           << "request: " << storage_req.ShortDebugString() << std::endl
+           << "response: " << storage_resp.ShortDebugString() << std::endl
+           << "latency=" << storage_cntl.latency_us() << "us";
+        switch (storage_resp.status().error_code()) {
+            case storage::StorageStatus_Code_Ok:
+            case storage::StorageStatus_Code_NotFound:
+                storage_ss << " success. ";
+                LOG(INFO) << storage_ss.str();
+                if (storage_resp.status().error_code() == storage::StorageStatus_Code_NotFound) {
+                    return Status::NotFound(storage_ss.str());
+                } else {
+                    value = storage_resp.value();
+                    return Status::Ok(storage_ss.str());
+                }
+            default:
+                storage_ss << " fail. ";
+                LOG(ERROR) << storage_ss.str();
+                return Status::StorageErr(storage_ss.str());
         }
     }
 }
