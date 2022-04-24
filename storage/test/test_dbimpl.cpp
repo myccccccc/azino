@@ -38,7 +38,6 @@ TEST_F(DBImplTest, crud) {
 TEST_F(DBImplTest, mvcc) {
     std::string seeked_key,seeked_value;
     azino::TimeStamp seeked_ts;
-    ASSERT_TRUE(storage->Put("MVCDKEYmvccffffffffffffffff0", "world1").error_code() == azino::storage::StorageStatus_Code_Ok);
     ASSERT_TRUE(storage->MVCCGet("mvcc",0,seeked_value,seeked_ts).error_code()==azino::storage::StorageStatus_Code_NotFound);
     ASSERT_TRUE(storage->MVCCPut("mvcc",5,"123").error_code()==azino::storage::StorageStatus_Code_Ok);
     ASSERT_TRUE(storage->MVCCGet("mvcc",0,seeked_value,seeked_ts).error_code()==azino::storage::StorageStatus_Code_NotFound);

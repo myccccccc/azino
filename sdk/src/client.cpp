@@ -406,15 +406,14 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
            << "latency=" << storage_cntl.latency_us() << "us";
         switch (storage_resp.status().error_code()) {
             case storage::StorageStatus_Code_Ok:
-            case storage::StorageStatus_Code_NotFound:
                 storage_ss << " success. ";
                 LOG(INFO) << storage_ss.str();
-                if (storage_resp.status().error_code() == storage::StorageStatus_Code_NotFound) {
-                    return Status::NotFound(storage_ss.str());
-                } else {
-                    value = storage_resp.value();
-                    return Status::Ok(storage_ss.str());
-                }
+                value = storage_resp.value();
+                return Status::Ok(storage_ss.str());
+            case storage::StorageStatus_Code_NotFound:
+                storage_ss << " fail. ";
+                LOG(INFO) << storage_ss.str();
+                return Status::NotFound(storage_ss.str());
             default:
                 storage_ss << " fail. ";
                 LOG(ERROR) << storage_ss.str();

@@ -91,12 +91,12 @@ namespace storage {
             StorageStatus *ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
             LOG(WARNING) << cntl->remote_side() << " Fail to put mvcc key: " << request->key()
-                         << " ts: " <<request->ts()
+                         << " ts: " << request->ts()
                          << " error code: " << ss.error_code()
                          << " value: " << request->value() << " error message: " << ss.error_message();
         } else {
             LOG(INFO) << cntl->remote_side() << " Success to put mvcc key: " << request->key()
-                      << " ts: " <<request->ts()
+                      << " ts: " << request->ts()
                       << " value: " << request->value();
         }
     }
@@ -110,19 +110,16 @@ namespace storage {
         std::string value;
         TimeStamp  ts;
         StorageStatus ss = _storage->MVCCGet(request->key(), request->ts(), value, ts);
-        if (ss.error_code() != StorageStatus::Ok) {
+        if (ss.error_code() == StorageStatus_Code_Ok || ss.error_code() == StorageStatus_Code_NotFound) {
+            LOG(INFO) << cntl->remote_side() << ss.error_message();
             StorageStatus* ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
-            LOG(WARNING) << cntl->remote_side() << " Fail to get mvcc key: " << request->key()
-                         << " ts: "<<request->ts()
-                         << " error code: " << ss.error_code()
-                         << " error message: " << ss.error_message();
-        } else {
-            LOG(INFO) << cntl->remote_side() << " Success to get mvcc key: " << request->key()
-                      << " ts: " <<request->ts()
-                      << " value: " << value;
-            response->set_value(value);
             response->set_ts(ts);
+            if (ss.error_code() == StorageStatus_Code_Ok) response->set_value(value);
+        } else {
+            LOG(WARNING) << cntl->remote_side() << ss.error_message();
+            StorageStatus* ssts = new StorageStatus(ss);
+            response->set_allocated_status(ssts);
         }
     }
 
@@ -138,12 +135,12 @@ namespace storage {
             StorageStatus* ssts = new StorageStatus(ss);
             response->set_allocated_status(ssts);
             LOG(WARNING) << cntl->remote_side() << " Fail to delete mvcc key: " << request->key()
-                         << " ts: " <<request->ts()
+                         << " ts: " << request->ts()
                          << " error code: " << ss.error_code()
                          << " error message: " << ss.error_message();
         } else {
             LOG(INFO) << cntl->remote_side() << " Success to delete mvcc key: " << request->key()
-                      << " ts: " <<request->ts();
+                      << " ts: " << request->ts();
         }
     }
 

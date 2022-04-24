@@ -2,6 +2,7 @@
 #define AZINO_STORAGE_INCLUDE_STORAGE_H
 
 #include <string>
+#include <sstream>
 #include <butil/macros.h>
 
 #include "azino/kv.h"
@@ -87,23 +88,42 @@ namespace storage {
             auto internal_key = InternalKey(key, ts, false);
             std::string found_key, found_value;
             StorageStatus ss = Seek(internal_key.Encode(), found_key, found_value);
+            std::stringstream strs;
             if (ss.error_code() != StorageStatus::Ok) {
                 return ss;
             } else {
                 auto found_internal_key = InternalKey(found_key);
-                bool isMismatch = (!found_internal_key.Valid()) || (found_internal_key.UserKey() != key);
-                bool isDeleted = found_internal_key.Valid() && found_internal_key.IsDelete();
-                if ((!isMismatch) && (!isDeleted)) {
-                    value = found_value;
-                    seeked_ts = found_internal_key.TS();
+                bool isValid = found_internal_key.Valid();
+                bool isMatch = found_internal_key.UserKey() == key;
+                bool isDeleted = found_internal_key.IsDelete();
+                if (!isValid) {
+                    ss.set_error_code(StorageStatus_Code_Corruption);
+                    return ss;
+                } else if (!isMatch) {
+                    ss.set_error_code(StorageStatus_Code_NotFound);
+                    strs << " Fail to find mvcc key: " << key
+                         << " read ts: " << ts
+                         << " found key: " << found_internal_key.UserKey()
+                         << " found ts: " << seeked_ts
+                         << " found value: " << found_value;
+                    ss.set_error_message(strs.str());
+                    return ss;
+                } else if (isDeleted) {
+                    ss.set_error_code(StorageStatus_Code_NotFound);
+                    strs << " Fail to find mvcc key: " << key
+                         << " read ts: " << ts
+                         << " found ts: " << seeked_ts
+                         << " who's value is deleted";
+                    ss.set_error_message(strs.str());
                     return ss;
                 } else {
-                    ss.set_error_code(StorageStatus_Code_NotFound);
-                    if (isMismatch) {
-                        ss.set_error_message("Entry not found.");
-                    } else {
-                        ss.set_error_message("Seeked entry indicates the key was deleted.");
-                    }
+                    value = found_value;
+                    seeked_ts = found_internal_key.TS();
+                    strs << " Success to find mvcc key: " << key
+                         << " read ts: " << ts
+                         << " found ts: " << seeked_ts
+                         << " found value: " << found_value;
+                    ss.set_error_message(strs.str());
                     return ss;
                 }
             }
