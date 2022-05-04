@@ -27,3 +27,15 @@ service TxService {
   rpc BeginTx(BeginTxRequest) returns (BeginTxResponse);
   rpc CommitTx(CommitTxRequest) returns (CommitTxResponse);
 }
+
+message StatBlockRequest {
+
+}
+
+message StatBlockResponse {
+
+}
+
+service TxStatService {
+  rpc StatBlock(StatBlockRequest) returns (StatBlockResponse);
+}

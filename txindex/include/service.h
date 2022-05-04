@@ -36,6 +36,16 @@ namespace txindex {
                           const ::azino::txindex::ReadRequest* request,
                           ::azino::txindex::ReadResponse* response,
                           ::google::protobuf::Closure* done) override;
+        void WriteLockCallBack(::google::protobuf::RpcController* controller,
+                               const ::azino::txindex::WriteLockRequest* request,
+                               ::azino::txindex::WriteLockResponse* response,
+                               ::google::protobuf::Closure* done,
+                               void* arg);
+        void ReadCallBack(::google::protobuf::RpcController* controller,
+                          const ::azino::txindex::ReadRequest* request,
+                          ::azino::txindex::ReadResponse* response,
+                          ::google::protobuf::Closure* done,
+                          void* arg);
 
     private:
         std::unique_ptr<TxIndex> _index;

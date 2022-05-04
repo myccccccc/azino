@@ -13,11 +13,18 @@
 DEFINE_int32(latch_bucket_num, 1024, "latch buckets number");
 DEFINE_bool(enable_persistor, false, "If enable persistor to persist data to storage server.");
 
-extern "C" void* CallbackWrapper(void* arg) {
-    auto* func = reinterpret_cast<std::function<void()>*>(arg);
-    func->operator()();
-    delete func;
-    return nullptr;
+struct CallbackArg {
+    std::function<void(void*)>* func;
+    void* arg;
+};
+
+void* CallbackWrapper(void* arg) {
+    auto _arg = (struct CallbackArg* ) arg;
+    _arg->func->operator()(_arg->arg);
+    delete _arg->func;
+    // TODO free _arg->arg
+    delete _arg;
+    return NULL;
 }
 
 namespace azino {
@@ -76,7 +83,7 @@ public:
     DISALLOW_COPY_AND_ASSIGN(KVBucket);
     ~KVBucket() = default;
 
-    virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void()> callback) override {
+    virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void(void*)> callback) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
@@ -107,7 +114,7 @@ public:
                 sts.set_error_message(ss.str());
                 LOG(INFO) << ss.str();
                 if (_blocked_ops.find(key) == _blocked_ops.end()) {
-                    _blocked_ops.insert(std::make_pair(key, std::vector<std::function<void()>>()));
+                    _blocked_ops.insert(std::make_pair(key, std::vector<std::function<void(void*)>>()));
                 }
                 _blocked_ops[key].push_back(callback);
                 return sts;
@@ -231,7 +238,9 @@ public:
             auto iter = _blocked_ops.find(key);
             for (auto& func : iter->second) {
                 bthread_t bid;
-                auto* arg = new std::function<void()>(func);
+                auto* arg = new struct CallbackArg;
+                arg->func = new std::function<void(void*)>(func);
+                arg->arg = NULL;
                 if (bthread_start_background(&bid, nullptr, CallbackWrapper, arg) != 0) {
                     LOG(ERROR) << "Failed to start callback.";
                 }
@@ -279,7 +288,9 @@ public:
             auto iter = _blocked_ops.find(key);
             for (auto& func : iter->second) {
                 bthread_t bid;
-                auto* arg = new std::function<void()>(func);
+                auto* arg = new struct CallbackArg;
+                arg->func = new std::function<void(void*)>(func);
+                arg->arg = NULL;
                 if (bthread_start_background(&bid, nullptr, CallbackWrapper, arg) != 0) {
                     LOG(ERROR) << "Failed to start callback.";
                 }
@@ -290,7 +301,7 @@ public:
         return sts;
     }
 
-    virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void()> callback) override {
+    virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void(void*)> callback) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
@@ -325,7 +336,7 @@ public:
             sts.set_error_message(ss.str());
             LOG(INFO) << ss.str();
             if (_blocked_ops.find(key) == _blocked_ops.end()) {
-                _blocked_ops.insert(std::make_pair(key, std::vector<std::function<void()>>()));
+                _blocked_ops.insert(std::make_pair(key, std::vector<std::function<void(void*)>>()));
             }
             _blocked_ops[key].push_back(callback);
             return sts;
@@ -422,7 +433,7 @@ public:
 
 private:
     std::unordered_map<std::string, std::unique_ptr<MVCCValue>> _kvs;
-    std::unordered_map<std::string, std::vector<std::function<void()>>> _blocked_ops;
+    std::unordered_map<std::string, std::vector<std::function<void(void*)>>> _blocked_ops;
     bthread::Mutex _latch;
 };
 
@@ -446,7 +457,7 @@ public:
         }
     }
 
-    virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void()> callback) override {
+    virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void(void*)> callback) override {
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
         return _kvbs[bucket_num]->WriteLock(key, txid, callback);
     }
@@ -466,7 +477,7 @@ public:
         return _kvbs[bucket_num]->Commit(key, txid);
     }
 
-    virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void()> callback) override {
+    virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void(void*)> callback) override {
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
         return _kvbs[bucket_num]->Read(key, v, txid, callback);
     }

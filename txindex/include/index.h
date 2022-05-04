@@ -30,7 +30,7 @@ namespace txindex {
         // This is an atomic read-write operation for one user_key, only used in pessimistic transactions.
         // Success when no newer version of this key, intent or lock exists.
         // Should success if txid already hold this lock.
-        virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void()> callback) = 0;
+        virtual TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid, std::function<void(void*)> callback) = 0;
 
         // This is an atomic read-write operation for one user_key, used in both pessimistic and optimistic transactions.
         // Success when no newer version of this key, intent or lock exists.
@@ -48,7 +48,7 @@ namespace txindex {
         // Current implementation uses snapshot isolation.
         // read will be blocked if there exists and intent who has a smaller ts than read's ts.
         // read will bypass any lock, and return the key value pair who has the biggest ts among all that have ts smaller than read's ts.
-        virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void()> callback) = 0;
+        virtual TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid, std::function<void(void*)> callback) = 0;
 
         virtual TxOpStatus GetPersisting(std::vector<DataToPersist> &datas) = 0;
 
