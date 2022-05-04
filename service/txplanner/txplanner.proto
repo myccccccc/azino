@@ -36,6 +36,6 @@ message StatBlockResponse {
 
 }
 
-service TxStatService {
+service StatService {
   rpc StatBlock(StatBlockRequest) returns (StatBlockResponse);
 }
