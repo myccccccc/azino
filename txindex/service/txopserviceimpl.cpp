@@ -38,7 +38,7 @@ namespace txindex {
         LOG(INFO) << ss.str();
 
         TxOpStatus* sts = new TxOpStatus(_index->WriteLock(request->key(), request->txid(),
-                                                           std::bind(&TxOpServiceImpl::WriteLockCallBack, this, controller, request, response, done, std::placeholders::_1)));
+                                                           std::bind(&TxOpServiceImpl::WriteLockCallback, this, controller, request, response, done, std::placeholders::_1)));
         if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
             done_guard.release();
             delete sts;
@@ -93,7 +93,7 @@ namespace txindex {
 
         Value* v = new Value();
         TxOpStatus* sts = new TxOpStatus(_index->Read(request->key(), *v, request->txid(),
-                                                           std::bind(&TxOpServiceImpl::ReadCallBack, this, controller, request, response, done, std::placeholders::_1)));
+                                                           std::bind(&TxOpServiceImpl::ReadCallback, this, controller, request, response, done, std::placeholders::_1)));
         if (sts->error_code() == TxOpStatus_Code_ReadBlock) {
             done_guard.release();
             delete sts;
@@ -104,7 +104,7 @@ namespace txindex {
         }
     }
 
-    void TxOpServiceImpl::WriteLockCallBack(::google::protobuf::RpcController* controller,
+    void TxOpServiceImpl::WriteLockCallback(::google::protobuf::RpcController* controller,
                                             const ::azino::txindex::WriteLockRequest* request,
                                             ::azino::txindex::WriteLockResponse* response,
                                             ::google::protobuf::Closure* done,
@@ -112,7 +112,8 @@ namespace txindex {
         // TODO use arg to decide whether to try WriteLock again or not
         WriteLock(controller, request, response, done);
     }
-    void TxOpServiceImpl::ReadCallBack(::google::protobuf::RpcController* controller,
+    
+    void TxOpServiceImpl::ReadCallback(::google::protobuf::RpcController* controller,
                                        const ::azino::txindex::ReadRequest* request,
                                        ::azino::txindex::ReadResponse* response,
                                        ::google::protobuf::Closure* done,
