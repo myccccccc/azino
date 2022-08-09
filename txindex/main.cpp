@@ -1,6 +1,7 @@
-#include <gflags/gflags.h>
-#include <butil/logging.h>
 #include <brpc/server.h>
+#include <butil/logging.h>
+#include <gflags/gflags.h>
+
 #include <toml/toml.hpp>
 
 #include "service.h"
@@ -9,14 +10,12 @@ DEFINE_string(txindex_addr, "0.0.0.0:8002", "Addresses of txindex");
 DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 
 namespace logging {
-    DECLARE_bool(crash_on_fatal_log);
+DECLARE_bool(crash_on_fatal_log);
 }
 
 namespace azino {
-namespace txindex {
-
-}
-}
+namespace txindex {}
+}  // namespace azino
 
 int main(int argc, char* argv[]) {
     logging::FLAGS_crash_on_fatal_log = true;

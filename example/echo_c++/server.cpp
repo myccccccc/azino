@@ -1,14 +1,18 @@
-#include <gflags/gflags.h>
-#include <butil/logging.h>
 #include <brpc/server.h>
+#include <butil/logging.h>
+#include <gflags/gflags.h>
+
 #include <toml/toml.hpp>
+
 #include "echo.pb.h"
 
 DEFINE_bool(echo_attachment, true, "Echo attachment as well");
 DEFINE_int32(port, 8000, "TCP Port of this server");
-DEFINE_int32(idle_timeout_s, -1, "Connection will be closed if there is no "
+DEFINE_int32(idle_timeout_s, -1,
+             "Connection will be closed if there is no "
              "read/write operations during the last `idle_timeout_s'");
-DEFINE_int32(logoff_ms, 2000, "Maximum duration of server's LOGOFF state "
+DEFINE_int32(logoff_ms, 2000,
+             "Maximum duration of server's LOGOFF state "
              "(waiting for client to close connection before server stops)");
 
 // Your implementation of example::EchoService
@@ -16,27 +20,24 @@ DEFINE_int32(logoff_ms, 2000, "Maximum duration of server's LOGOFF state "
 // additional information in /status.
 namespace example {
 class EchoServiceImpl : public EchoService {
-public:
-    EchoServiceImpl() {};
-    virtual ~EchoServiceImpl() {};
+   public:
+    EchoServiceImpl(){};
+    virtual ~EchoServiceImpl(){};
     virtual void Echo(google::protobuf::RpcController* cntl_base,
-                      const EchoRequest* request,
-                      EchoResponse* response,
+                      const EchoRequest* request, EchoResponse* response,
                       google::protobuf::Closure* done) {
         // This object helps you to call done->Run() in RAII style. If you need
         // to process the request asynchronously, pass done_guard.release().
         brpc::ClosureGuard done_guard(done);
 
-        brpc::Controller* cntl =
-            static_cast<brpc::Controller*>(cntl_base);
+        brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
 
         // The purpose of following logs is to help you to understand
-        // how clients interact with servers more intuitively. You should 
+        // how clients interact with servers more intuitively. You should
         // remove these logs in performance-sensitive servers.
-        LOG(INFO) << "Received request[log_id=" << cntl->log_id() 
-                  << "] from " << cntl->remote_side() 
-                  << " to " << cntl->local_side()
-                  << ": " << request->message()
+        LOG(INFO) << "Received request[log_id=" << cntl->log_id() << "] from "
+                  << cntl->remote_side() << " to " << cntl->local_side() << ": "
+                  << request->message()
                   << " (attached=" << cntl->request_attachment() << ")";
 
         // Fill response.
@@ -68,7 +69,7 @@ int main(int argc, char* argv[]) {
     // Add the service into server. Notice the second parameter, because the
     // service is put on stack, we don't want server to delete it, otherwise
     // use brpc::SERVER_OWNS_SERVICE.
-    if (server.AddService(&echo_service_impl, 
+    if (server.AddService(&echo_service_impl,
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(ERROR) << "Fail to add service";
         return -1;
