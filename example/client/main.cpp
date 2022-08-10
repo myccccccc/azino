@@ -1,7 +1,8 @@
-#include "azino/client.h"
-
 #include <gflags/gflags.h>
+
 #include <iostream>
+
+#include "azino/client.h"
 
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 
@@ -53,13 +54,12 @@ int main(int argc, char* argv[]) {
                 opts.type = azino::kOptimistic;
                 auto sts = tx.Delete(opts, key);
                 std::cout << sts.ToString() << std::endl;
-            }  else {
+            } else {
                 std::getline(std::cin, action);
-                std::cout << "Use pput, oput, get or pdelete, odelete" << std::endl;
+                std::cout << "Use pput, oput, get or pdelete, odelete"
+                          << std::endl;
                 continue;
             }
         }
     }
 }
-
-

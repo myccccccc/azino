@@ -1,20 +1,19 @@
-#include <gflags/gflags.h>
-#include <butil/logging.h>
 #include <brpc/server.h>
+#include <butil/logging.h>
+#include <gflags/gflags.h>
+
 #include <toml/toml.hpp>
 
 DEFINE_string(server, "0.0.0.0:8000", "Address of server");
 namespace logging {
-    DECLARE_bool(crash_on_fatal_log);
+DECLARE_bool(crash_on_fatal_log);
 }
 
 #include "service.h"
 
 namespace azino {
-namespace storage {
-
-} // namespace storage
-} // namespace azino
+namespace storage {}  // namespace storage
+}  // namespace azino
 
 int main(int argc, char* argv[]) {
     logging::FLAGS_crash_on_fatal_log = true;
@@ -38,4 +37,3 @@ int main(int argc, char* argv[]) {
     server.RunUntilAskedToQuit();
     return 0;
 }
-

@@ -8,29 +8,31 @@
 
 namespace azino {
 namespace txplanner {
-    class AscendingTimer;
+class AscendingTimer;
 
-    class TxServiceImpl : public TxService {
-    public:
-        TxServiceImpl(const std::vector<std::string>& txindex_addrs, const std::string& storage_addr);
-        ~TxServiceImpl();
+class TxServiceImpl : public TxService {
+   public:
+    TxServiceImpl(const std::vector<std::string>& txindex_addrs,
+                  const std::string& storage_addr);
+    ~TxServiceImpl();
 
-        virtual void BeginTx(::google::protobuf::RpcController* controller,
-                             const ::azino::txplanner::BeginTxRequest* request,
-                             ::azino::txplanner::BeginTxResponse* response,
-                             ::google::protobuf::Closure* done) override;
+    virtual void BeginTx(::google::protobuf::RpcController* controller,
+                         const ::azino::txplanner::BeginTxRequest* request,
+                         ::azino::txplanner::BeginTxResponse* response,
+                         ::google::protobuf::Closure* done) override;
 
-        virtual void CommitTx(::google::protobuf::RpcController* controller,
-                              const ::azino::txplanner::CommitTxRequest* request,
-                              ::azino::txplanner::CommitTxResponse* response,
-                              ::google::protobuf::Closure* done) override;
+    virtual void CommitTx(::google::protobuf::RpcController* controller,
+                          const ::azino::txplanner::CommitTxRequest* request,
+                          ::azino::txplanner::CommitTxResponse* response,
+                          ::google::protobuf::Closure* done) override;
 
-    private:
-        std::unique_ptr<AscendingTimer> _timer;
-        std::vector<std::string> _txindex_addrs; // txindex addresses in form of "0.0.0.0:8000"
-        std::string _storage_addr; // storage addresses in form of "0.0.0.0:8000"
-    };
+   private:
+    std::unique_ptr<AscendingTimer> _timer;
+    std::vector<std::string>
+        _txindex_addrs;         // txindex addresses in form of "0.0.0.0:8000"
+    std::string _storage_addr;  // storage addresses in form of "0.0.0.0:8000"
+};
 
-}
-}
-#endif // AZINO_TXPLANNER_INCLUDE_SERVICE_H
+}  // namespace txplanner
+}  // namespace azino
+#endif  // AZINO_TXPLANNER_INCLUDE_SERVICE_H
