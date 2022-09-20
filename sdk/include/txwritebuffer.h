@@ -10,12 +10,13 @@
 #include "service/kv.pb.h"
 
 namespace azino {
+enum TxWriteStatus { NONE = 0, LOCKED = 1, PREPUTED = 2, COMMITTED = 3 };
 class TxWriteBuffer {
    public:
     typedef struct Write {
         WriteOptions options;
-        std::shared_ptr<Value> value = nullptr;
-        bool preput = false;
+        Value value;
+        TxWriteStatus status = NONE;
     } TxWrite;
 
     TxWriteBuffer() = default;
@@ -23,14 +24,14 @@ class TxWriteBuffer {
     ~TxWriteBuffer() = default;
 
     // WriteBuffer will free value later
-    void Write(const UserKey& key, Value* value, const WriteOptions options) {
+    void Upsert(const WriteOptions options, const UserKey& key, bool is_delete,
+                const UserValue& value) {
         if (_m.find(key) == _m.end()) {
             _m.insert(std::make_pair(key, TxWrite()));
         }
-        _m[key].value.reset(value);
-        // if op1 write key1 pessimistic, then op2 write key1 optimistic
-        // key1 is still write pessimistic
-        _m[key].options.type = std::max(_m[key].options.type, options.type);
+        _m[key].options = options;
+        _m[key].value.set_is_delete(is_delete);
+        _m[key].value.set_content(value);
     }
 
     std::__detail::_Node_iterator<

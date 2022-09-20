@@ -14,18 +14,37 @@ namespace azino {
 DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
 DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
 
+#define LOG_CHANNEL_ERROR(addr, err, ss)                                     \
+    ss << " Fail to initialize channel: " << addr << " error code: " << err; \
+    LOG(WARNING) << ss.str();
+
+#define LOG_CONTROLLER_ERROR(cntl, ss)                              \
+    ss << " Sdk controller failed error code: " << cntl.ErrorCode() \
+       << " error text: " << cntl.ErrorText();                      \
+    LOG(WARNING) << ss.str();
+
+#define LOG_SDK(cntl, req, resp, msg)                                         \
+    LOG(INFO) << " Sdk: " << cntl.local_side() << " " << #msg << ": "         \
+              << cntl.remote_side() << " request: " << req.ShortDebugString() \
+              << " response: " << resp.ShortDebugString()                     \
+              << " latency= " << cntl.latency_us() << "us";
+
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
-    : _options(new Options(options)),
+    : _options(options),
       _channel_options(new brpc::ChannelOptions),
       _txid(nullptr),
       _txwritebuffer(new TxWriteBuffer) {
     _channel_options->timeout_ms = FLAGS_timeout_ms;
     _channel_options->max_retry = FLAGS_max_retry;
 
+    std::stringstream ss;
     auto* channel = new brpc::Channel();
-    if (channel->Init(txplanner_addr.c_str(), _channel_options.get()) != 0) {
-        LOG(ERROR) << "Fail to initialize channel: " << txplanner_addr;
+    int err;
+    err = channel->Init(txplanner_addr.c_str(), _channel_options.get());
+    if (err) {
+        LOG_CHANNEL_ERROR(txplanner_addr, err, ss)
+        return;
     }
     _txplanner.reset(channel);
 }
@@ -33,9 +52,10 @@ Transaction::Transaction(const Options& options,
 Transaction::~Transaction() = default;
 
 Status Transaction::Begin() {
+    int err = 0;
     std::stringstream ss;
     if (_txid) {
-        ss << "Transaction has already began. " << _txid->ShortDebugString();
+        ss << " Transaction has already began. " << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
     azino::txplanner::TxService_Stub stub(_txplanner.get());
@@ -44,59 +64,63 @@ Status Transaction::Begin() {
     azino::txplanner::BeginTxResponse resp;
     stub.BeginTx(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
-        ss << "Controller failed error code: " << cntl.ErrorCode()
-           << " error text: " << cntl.ErrorText();
-        LOG(WARNING) << ss.str();
+        LOG_CONTROLLER_ERROR(cntl, ss)
         return Status::NetworkErr(ss.str());
     }
-    ss << "sdk: " << cntl.local_side()
-       << " BeginTx from txplanner: " << cntl.remote_side() << std::endl
-       << "request: " << req.ShortDebugString() << std::endl
-       << "response: " << resp.ShortDebugString() << std::endl
-       << "latency=" << cntl.latency_us() << "us";
-    if (!resp.has_storage_addr() || resp.txindex_addrs_size() == 0) {
-        ss << " fail. ";
-        LOG(WARNING) << ss.str();
-        return Status::NotSupportedErr(ss.str());
-    }
-    ss << " success. ";
-    LOG(INFO) << ss.str();
+
+    LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    assert(_txid->status().status_code() == TxStatus_Code_Started);
+    if (_txid->status().status_code() != TxStatus_Code_Started) {
+        ss << " Wrong tx status code: " << _txid->status().status_code();
+        return Status::NotSupportedErr(ss.str());
+    }
+    if (!resp.has_storage_addr()) {
+        ss << " Missing storage addr";
+        return Status::NotSupportedErr(ss.str());
+    }
+    if (resp.txindex_addrs_size() == 0) {
+        ss << " Missing txindex addrs";
+        return Status::NotSupportedErr(ss.str());
+    }
 
     auto* channel = new brpc::Channel();
-    if (channel->Init(resp.storage_addr().c_str(), _channel_options.get()) !=
-        0) {
-        LOG(ERROR) << "Fail to initialize channel: " << resp.storage_addr();
+    err = channel->Init(resp.storage_addr().c_str(), _channel_options.get());
+    if (err) {
+        LOG_CHANNEL_ERROR(resp.storage_addr(), err, ss)
+        return Status::NetworkErr(ss.str());
     }
     _storage.reset(channel);
 
     for (int i = 0; i < resp.txindex_addrs_size(); i++) {
         auto* txindex_channel = new brpc::Channel();
-        if (txindex_channel->Init(resp.txindex_addrs(i).c_str(),
-                                  _channel_options.get()) != 0) {
-            LOG(ERROR) << "Fail to initialize channel: "
-                       << resp.txindex_addrs(i);
+        err = txindex_channel->Init(resp.txindex_addrs(i).c_str(),
+                                    _channel_options.get());
+        if (err) {
+            LOG_CHANNEL_ERROR(resp.txindex_addrs(i), err, ss)
+            return Status::NetworkErr(ss.str());
         }
         _txindexs.emplace_back(txindex_channel);
     }
 
-    return Status::Ok(ss.str());
+    return Status::Ok();
 }
 
 Status Transaction::Commit() {
     std::stringstream ss;
+    Status preput_sts = Status::Ok();
+    Status commit_sts = Status::Ok();
     if (!_txid) {
-        ss << "Transaction has not began. ";
+        ss << " Transaction has not began. ";
         return Status::IllegalTxOp(ss.str());
     }
     if (_txid->status().status_code() != TxStatus_Code_Started) {
-        ss << "Transaction is not allowed to commit. "
+        ss << " Transaction is not allowed to commit. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
 
+    // todo: commit op should be issused after preputAll ok
     azino::txplanner::TxService_Stub stub(_txplanner.get());
     brpc::Controller cntl;
     azino::txplanner::CommitTxRequest req;
@@ -104,182 +128,180 @@ Status Transaction::Commit() {
     azino::txplanner::CommitTxResponse resp;
     stub.CommitTx(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
-        ss << "Controller failed error code: " << cntl.ErrorCode()
-           << " error text: " << cntl.ErrorText();
-        LOG(WARNING) << ss.str();
+        LOG_CONTROLLER_ERROR(cntl, ss)
         return Status::NetworkErr(ss.str());
     }
-    ss << "sdk: " << cntl.local_side()
-       << " CommitTx from txplanner: " << cntl.remote_side() << std::endl
-       << "request: " << req.ShortDebugString() << std::endl
-       << "response: " << resp.ShortDebugString() << std::endl
-       << "latency=" << cntl.latency_us() << "us";
-    ss << " success. ";
-    LOG(INFO) << ss.str();
+
+    LOG_SDK(cntl, req, resp, CommitTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    auto* txid_sts = _txid->release_status();
+    if (_txid->status().status_code() != TxStatus_Code_Preputting) {
+        ss << " Wrong tx status code: " << _txid->status().status_code();
+        return Status::NotSupportedErr(ss.str());
+    }
+
+    auto txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
 
-    Status preput_sts = PreputAll();
-    if (preput_sts.IsOk()) {
-        txid_sts->set_status_code(TxStatus_Code_Committing);
-        Status commit_sts = CommitAll();
-        if (commit_sts.IsOk()) {
-            txid_sts->set_status_code(TxStatus_Code_Committed);
-            txid_sts->set_status_message(commit_sts.ToString());
-            return commit_sts;
-        } else {
-            txid_sts->set_status_code(TxStatus_Code_Abnormal);
-            txid_sts->set_status_message(commit_sts.ToString());
-            return commit_sts;
-        }
+    preput_sts = PreputAll();
+    if (!preput_sts.IsOk()) {
+        goto abort;
+    }
+
+    txid_sts->set_status_code(TxStatus_Code_Committing);
+    commit_sts = CommitAll();
+    if (commit_sts.IsOk()) {
+        txid_sts->set_status_code(TxStatus_Code_Committed);
+        txid_sts->set_status_message(commit_sts.ToString());
+        return commit_sts;
     } else {
-        txid_sts->set_status_code(TxStatus_Code_Aborting);
-        Status abort_sts = AbortAll();
-        if (abort_sts.IsOk()) {
-            txid_sts->set_status_code(TxStatus_Code_Aborted);
-            txid_sts->set_status_message(preput_sts.ToString());
-            return preput_sts;
-        } else {
-            txid_sts->set_status_code(TxStatus_Code_Abnormal);
-            txid_sts->set_status_message(abort_sts.ToString());
-            return abort_sts;
-        }
+        txid_sts->set_status_code(TxStatus_Code_Abnormal);
+        txid_sts->set_status_message(commit_sts.ToString());
+        return commit_sts;
+    }
+
+abort:
+    txid_sts->set_status_code(TxStatus_Code_Aborting);
+    Status abort_sts = AbortAll();
+    if (abort_sts.IsOk()) {
+        txid_sts->set_status_code(TxStatus_Code_Aborted);
+        txid_sts->set_status_message(preput_sts.ToString());
+        return preput_sts;
+    } else {
+        txid_sts->set_status_code(TxStatus_Code_Abnormal);
+        txid_sts->set_status_message(abort_sts.ToString());
+        return abort_sts;
     }
 }
 
 Status Transaction::PreputAll() {
-    assert(_txid->status().status_code() == TxStatus_Code_Preputting);
     std::stringstream ss;
+
+    // todo: parallelize preputing
     for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
          iter++) {
-        assert(!iter->second.preput);
-        ss = std::stringstream();
+        assert(iter->second.status < TxWriteStatus::PREPUTED);
+
+        // todo: use a wrapper
         auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
         azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+
         brpc::Controller cntl;
         azino::txindex::WriteIntentRequest req;
+        // todo: avoid memory copy here
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
-        req.set_allocated_value(iter->second.value.get());
+        req.set_allocated_value(&iter->second.value);
         azino::txindex::WriteIntentResponse resp;
         stub.WriteIntent(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            ss << "Controller failed error code: " << cntl.ErrorCode()
-               << " error text: " << cntl.ErrorText();
-            LOG(WARNING) << ss.str();
+            LOG_CONTROLLER_ERROR(cntl, ss)
             req.release_value();
             return Status::NetworkErr(ss.str());
         }
-        ss << "sdk: " << cntl.local_side()
-           << " WriteIntent from txindex: " << cntl.remote_side() << std::endl
-           << "request: " << req.ShortDebugString() << std::endl
-           << "response: " << resp.ShortDebugString() << std::endl
-           << "latency=" << cntl.latency_us() << "us";
+
+        LOG_SDK(cntl, req, resp, WriteIntent_from_txindex)
+
         req.release_value();
+
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
-                ss << " success. ";
-                LOG(INFO) << ss.str();
-                iter->second.preput = true;
+                iter->second.status = TxWriteStatus::PREPUTED;
                 break;
-            case TxOpStatus_Code_WriteTooLate:
-            case TxOpStatus_Code_WriteConflicts:
-                ss << " fail. ";
-                LOG(INFO) << ss.str();
-                return Status::TxIndexErr(ss.str());
             default:
-                ss << " fail. ";
-                LOG(ERROR) << ss.str();
+                ss << " Preput key: " << iter->first
+                   << " value: " << iter->second.value.ShortDebugString()
+                   << " error code: " << resp.tx_op_status().error_code()
+                   << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
     }
-    return Status::Ok();  // todo: add some error message
+
+    return Status::Ok();
 }
 
 Status Transaction::CommitAll() {
-    assert(_txid->status().status_code() == TxStatus_Code_Committing);
     std::stringstream ss;
 
+    // todo: parallelize committing
     for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
          iter++) {
-        assert(iter->second.preput);
-        ss = std::stringstream();
+        assert(iter->second.status == TxWriteStatus::PREPUTED);
+
+        // todo: use a wrapper
         auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
         azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+
         brpc::Controller cntl;
         azino::txindex::CommitRequest req;
+        // todo: avoid memory copy here
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
         azino::txindex::CommitResponse resp;
         stub.Commit(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            ss << "Controller failed error code: " << cntl.ErrorCode()
-               << " error text: " << cntl.ErrorText();
-            LOG(WARNING) << ss.str();
+            LOG_CONTROLLER_ERROR(cntl, ss)
             return Status::NetworkErr(ss.str());
         }
-        ss << "sdk: " << cntl.local_side()
-           << " Commit from txindex: " << cntl.remote_side() << std::endl
-           << "request: " << req.ShortDebugString() << std::endl
-           << "response: " << resp.ShortDebugString() << std::endl
-           << "latency=" << cntl.latency_us() << "us";
+
+        LOG_SDK(cntl, req, resp, Commit_from_txindex)
+
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
-                ss << " success. ";
-                LOG(INFO) << ss.str();
+                iter->second.status = TxWriteStatus::COMMITTED;
                 break;
             default:
-                ss << " fail. ";
-                LOG(ERROR) << ss.str();
+                ss << " Commit key: " << iter->first
+                   << " value: " << iter->second.value.ShortDebugString()
+                   << " error code: " << resp.tx_op_status().error_code()
+                   << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
     }
-    return Status::Ok();  // todo: add some error message
+    return Status::Ok();
 }
 
 Status Transaction::AbortAll() {
-    assert(_txid->status().status_code() == TxStatus_Code_Aborting);
     std::stringstream ss;
 
+    // todo: parallelize aborting
     for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
          iter++) {
-        if (!iter->second.preput && iter->second.options.type == kOptimistic)
+        if (iter->second.status == TxWriteStatus::NONE) {
             continue;
-        ss = std::stringstream();
+        }
+
+        // todo: use a wrapper
         auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
         azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+
         brpc::Controller cntl;
         azino::txindex::CleanRequest req;
+        // todo: avoid memory copy here
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
         azino::txindex::CleanResponse resp;
         stub.Clean(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            ss << "Controller failed error code: " << cntl.ErrorCode()
-               << " error text: " << cntl.ErrorText();
-            LOG(WARNING) << ss.str();
+            LOG_CONTROLLER_ERROR(cntl, ss)
             return Status::NetworkErr(ss.str());
         }
-        ss << "sdk: " << cntl.local_side()
-           << " Clean from txindex: " << cntl.remote_side() << std::endl
-           << "request: " << req.ShortDebugString() << std::endl
-           << "response: " << resp.ShortDebugString() << std::endl
-           << "latency=" << cntl.latency_us() << "us";
+
+        LOG_SDK(cntl, req, resp, Clean_from_txindex)
+
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
-                ss << " success. ";
-                LOG(INFO) << ss.str();
-                iter->second.preput = false;
+                iter->second.status = TxWriteStatus::NONE;
                 break;
             default:
-                ss << " fail. ";
-                LOG(ERROR) << ss.str();
+                ss << " Abort key: " << iter->first
+                   << " value: " << iter->second.value.ShortDebugString()
+                   << " error code: " << resp.tx_op_status().error_code()
+                   << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
     }
-    return Status::Ok();  // todo: add some error message
+    return Status::Ok();
 }
 
 Status Transaction::Put(const WriteOptions& options, const UserKey& key,
@@ -295,125 +317,112 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
                           bool is_delete, const UserValue& value) {
     std::stringstream ss;
     if (!_txid) {
-        ss << "Transaction has not began. ";
+        ss << " Transaction has not began.";
         return Status::IllegalTxOp(ss.str());
     }
     if (_txid->status().status_code() != TxStatus_Code_Started) {
-        ss << "Transaction is not allowed to put. "
+        ss << " Transaction is not allowed to put. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
 
-    std::unique_ptr<Value> saved_value(new Value);
-    if (is_delete) {
-        saved_value->set_is_delete(true);
-    } else {
-        saved_value->set_is_delete(false);
-        saved_value->set_content(value);
-    }
-    WriteOptions saved_options = options;
-    if (saved_options.type == WriteType::kAutomatic) {
-        // todo: automatic chose type
-        saved_options.type = WriteType::kOptimistic;
-    }
+    auto iter = _txwritebuffer->find(key);
+    if ((iter == _txwritebuffer->end()) ||
+        (options.type == kPessimistic &&
+         iter->second.status != TxWriteStatus::LOCKED)) {
+        // Pessimistic
 
-    if (saved_options.type == kPessimistic &&
-        (_txwritebuffer->find(key) == _txwritebuffer->end() ||
-         _txwritebuffer->find(key)->second.options.type !=
-             kPessimistic)) {  // Pessimistic
+        // todo: use a wrapper
         auto txindex_num = butil::Hash(key) % _txindexs.size();
         azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+
         brpc::Controller cntl;
         azino::txindex::WriteLockRequest req;
+        // todo: avoid memory copy here
         req.set_key(key);
         req.set_allocated_txid(new TxIdentifier(*_txid));
         azino::txindex::WriteLockResponse resp;
         stub.WriteLock(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            ss << "Controller failed error code: " << cntl.ErrorCode()
-               << " error text: " << cntl.ErrorText();
-            LOG(WARNING) << ss.str();
+            LOG_CONTROLLER_ERROR(cntl, ss)
             return Status::NetworkErr(ss.str());
         }
-        ss << "sdk: " << cntl.local_side()
-           << " WriteLock from txindex: " << cntl.remote_side() << std::endl
-           << "request: " << req.ShortDebugString() << std::endl
-           << "response: " << resp.ShortDebugString() << std::endl
-           << "latency=" << cntl.latency_us() << "us";
+
+        LOG_SDK(cntl, req, resp, WriteLock_from_txindex)
+
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
-                ss << " success. ";
-                LOG(INFO) << ss.str();
+                iter->second.status = TxWriteStatus::LOCKED;
                 break;
-            case TxOpStatus_Code_WriteTooLate:
-                // todo: fail to lock, may use some optimistic approach
-                ss << " fail. ";
-                LOG(INFO) << ss.str();
-                return Status::TxIndexErr(ss.str());
             default:
-                ss << " fail. ";
-                LOG(ERROR) << ss.str();
+                // todo: fail to lock, may use some optimistic approach
+                ss << " Lock key: " << iter->first
+                   << " value: " << iter->second.value.ShortDebugString()
+                   << " error code: " << resp.tx_op_status().error_code()
+                   << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
     }
 
-    ss << "Write in TxWriteBuffer key: " << key
-       << " Value: " << saved_value->ShortDebugString();
-    _txwritebuffer->Write(key, saved_value.release(), saved_options);
-    return Status::Ok(ss.str());
+    _txwritebuffer->Upsert(options, key, is_delete, value);
+
+    return Status::Ok();
 }
 
 Status Transaction::Get(const ReadOptions& options, const UserKey& key,
                         UserValue& value) {
     std::stringstream ss;
+
     auto iter = _txwritebuffer->find(key);
     if (iter != _txwritebuffer->end()) {
         auto v = iter->second.value;
-        ss << "Find in TxWriteBuffer Key: " << key
-           << " Value: " << v->ShortDebugString();
-        if (v->is_delete()) {
+        ss << " Find in TxWriteBuffer Key: " << key
+           << " Value: " << v.ShortDebugString();
+        if (v.is_delete()) {
             return Status::NotFound(ss.str());
         } else {
-            value = v->content();
+            value = v.content();
             return Status::Ok(ss.str());
         }
     }
+
+    // todo: use a wrapper
     auto txindex_num = butil::Hash(key) % _txindexs.size();
     azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+
     brpc::Controller cntl;
     azino::txindex::ReadRequest req;
+    // todo: avoid memory copy here
     req.set_key(key);
     req.set_allocated_txid(new TxIdentifier(*_txid));
     azino::txindex::ReadResponse resp;
     stub.Read(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
-        ss << "Controller failed error code: " << cntl.ErrorCode()
-           << " error text: " << cntl.ErrorText();
-        LOG(WARNING) << ss.str();
+        LOG_CONTROLLER_ERROR(cntl, ss)
         return Status::NetworkErr(ss.str());
     }
-    ss << "sdk: " << cntl.local_side()
-       << " Read from txindex: " << cntl.remote_side() << std::endl
-       << "request: " << req.ShortDebugString() << std::endl
-       << "response: " << resp.ShortDebugString() << std::endl
-       << "latency=" << cntl.latency_us() << "us";
+
+    LOG_SDK(cntl, req, resp, Read_from_txindex)
+
     switch (resp.tx_op_status().error_code()) {
         case TxOpStatus_Code_Ok:
-            ss << " success. ";
-            LOG(INFO) << ss.str();
+            ss << " Find in TxIndex Key: " << key
+               << " Value: " << resp.value().ShortDebugString();
             if (resp.value().is_delete()) {
                 return Status::NotFound(ss.str());
             } else {
                 value = resp.value().content();
                 return Status::Ok(ss.str());
             }
-        case TxOpStatus_Code_ReadNotExist:
-            ss << " fail. ";
-            LOG(INFO) << ss.str();
-            goto readStorage;
         default:
-            ss << " fail. ";
-            LOG(ERROR) << ss.str();
+            ss << " Find in TxIndex Key: " << key
+               << " value: " << resp.value().ShortDebugString()
+               << " error code: " << resp.tx_op_status().error_code()
+               << " error message: " << resp.tx_op_status().error_message();
+            if (resp.tx_op_status().error_code() ==
+                TxOpStatus_Code_ReadNotExist) {
+                goto readStorage;
+            }
             return Status::TxIndexErr(ss.str());
     }
 
@@ -427,31 +436,26 @@ readStorage:
     storage_stub.MVCCGet(&storage_cntl, &storage_req, &storage_resp, nullptr);
     std::stringstream storage_ss;
     if (storage_cntl.Failed()) {
-        storage_ss << "Controller failed error code: "
-                   << storage_cntl.ErrorCode()
-                   << " error text: " << storage_cntl.ErrorText();
-        LOG(WARNING) << storage_ss.str();
+        LOG_CONTROLLER_ERROR(storage_cntl, storage_ss)
         return Status::NetworkErr(storage_ss.str());
     }
-    storage_ss << "sdk: " << storage_cntl.local_side()
-               << " Read from storage: " << storage_cntl.remote_side()
-               << std::endl
-               << "request: " << storage_req.ShortDebugString() << std::endl
-               << "response: " << storage_resp.ShortDebugString() << std::endl
-               << "latency=" << storage_cntl.latency_us() << "us";
+
+    LOG_SDK(storage_cntl, storage_req, storage_resp, Read_from_storage)
+
     switch (storage_resp.status().error_code()) {
         case storage::StorageStatus_Code_Ok:
-            storage_ss << " success. ";
-            LOG(INFO) << storage_ss.str();
+            ss << " Find in Storage Key: " << key
+               << " Value: " << storage_resp.value();
             value = storage_resp.value();
             return Status::Ok(storage_ss.str());
         case storage::StorageStatus_Code_NotFound:
-            storage_ss << " fail. ";
-            LOG(INFO) << storage_ss.str();
+            ss << " Find in Storage Key: " << key << " No Value";
             return Status::NotFound(storage_ss.str());
         default:
-            storage_ss << " fail. ";
-            LOG(ERROR) << storage_ss.str();
+            ss << " Find in Storage Key: " << key
+               << " value: " << storage_resp.value()
+               << " error code: " << storage_resp.status().error_code()
+               << " error message: " << storage_resp.status().error_message();
             return Status::StorageErr(storage_ss.str());
     }
 }
