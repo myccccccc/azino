@@ -1,3 +1,4 @@
+#include <butil/logging.h>
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
 
@@ -6,6 +7,16 @@
 #include "azino/kv.h"
 #include "storage.h"
 #include "utils.h"
+
+#define CHECK_DB_PTR                                           \
+    do {                                                       \
+        if (_leveldbptr == nullptr) {                          \
+            StorageStatus ss;                                  \
+            ss.set_error_code(StorageStatus::InvalidArgument); \
+            ss.set_error_message("Haven't opened an leveldb"); \
+            return ss;                                         \
+        }                                                      \
+    } while (0);
 
 namespace azino {
 namespace storage {
@@ -41,12 +52,7 @@ class LevelDBImpl : public Storage {
     // and a non-OK status on error.
     virtual StorageStatus Put(const std::string &key,
                               const std::string &value) override {
-        if (_leveldbptr == nullptr) {
-            StorageStatus ss;
-            ss.set_error_code(StorageStatus::InvalidArgument);
-            ss.set_error_message("Haven't opened an leveldb");
-            return ss;
-        }
+        CHECK_DB_PTR
         leveldb::WriteOptions opts;
         opts.sync = true;
         leveldb::Status leveldbstatus;
@@ -55,12 +61,7 @@ class LevelDBImpl : public Storage {
     }
 
     virtual StorageStatus BatchStore(const std::vector<Data> &datas) override {
-        if (_leveldbptr == nullptr) {
-            StorageStatus ss;
-            ss.set_error_code(StorageStatus::InvalidArgument);
-            ss.set_error_message("Haven't opened an leveldb");
-            return ss;
-        }
+        CHECK_DB_PTR
         leveldb::WriteOptions opts;
         opts.sync = true;
         leveldb::Status leveldbstatus;
@@ -73,18 +74,13 @@ class LevelDBImpl : public Storage {
         leveldbstatus = _leveldbptr->Write(opts, &batch);
         return LevelDBStatus(leveldbstatus);
     }
+
     // Remove the database entry (if any) for "key".  Returns OK on
     // success, and a non-OK status on error.  It is not an error if "key"
     // did not exist in the database.
     virtual StorageStatus Delete(const std::string &key) override {
-        if (_leveldbptr == nullptr) {
-            StorageStatus ss;
-            ss.set_error_code(StorageStatus::InvalidArgument);
-            ss.set_error_message("Haven't opened an leveldb");
-            return ss;
-        }
+        CHECK_DB_PTR
         leveldb::WriteOptions opts;
-        opts.sync = true;
         leveldb::Status leveldbstatus;
         leveldbstatus = _leveldbptr->Delete(opts, key);
         return LevelDBStatus(leveldbstatus);
@@ -99,14 +95,8 @@ class LevelDBImpl : public Storage {
     // May return some other Status on an error.
     virtual StorageStatus Get(const std::string &key,
                               std::string &value) override {
-        if (_leveldbptr == nullptr) {
-            StorageStatus ss;
-            ss.set_error_code(StorageStatus::InvalidArgument);
-            ss.set_error_message("Haven't opened an leveldb");
-            return ss;
-        }
+        CHECK_DB_PTR
         leveldb::ReadOptions opt;
-        opt.verify_checksums = true;
         leveldb::Status leveldbstatus;
         leveldbstatus = _leveldbptr->Get(opt, key, &value);
         return LevelDBStatus(leveldbstatus);
@@ -114,14 +104,8 @@ class LevelDBImpl : public Storage {
 
     virtual StorageStatus Seek(const std::string &key, std::string &found_key,
                                std::string &value) override {
-        if (_leveldbptr == nullptr) {
-            StorageStatus ss;
-            ss.set_error_code(StorageStatus::InvalidArgument);
-            ss.set_error_message("Haven't opened an leveldb");
-            return ss;
-        }
+        CHECK_DB_PTR
         leveldb::ReadOptions opt;
-        opt.verify_checksums = true;
         std::unique_ptr<leveldb::Iterator> iter(_leveldbptr->NewIterator(opt));
         iter->Seek(key);
         if (iter->Valid()) {
@@ -130,8 +114,7 @@ class LevelDBImpl : public Storage {
             return LevelDBStatus(iter->status());
         } else {
             if (iter->status().ok()) {
-                return LevelDBStatus(leveldb::Status::NotFound(
-                    "Iter status: " + iter->status().ToString()));
+                return LevelDBStatus(leveldb::Status::NotFound(""));
             } else {
                 return LevelDBStatus(iter->status());
             }
