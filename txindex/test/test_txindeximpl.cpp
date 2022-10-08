@@ -45,6 +45,7 @@ class TxIndexImplTest : public testing::Test {
    protected:
     void SetUp() {
         UnCalled();
+        FLAGS_latch_bucket_num = 1;
         ti = azino::txindex::TxIndex::DefaultTxIndex(
             "127.0.0.1:1080");  //  A dummy address
         t1.set_start_ts(1);

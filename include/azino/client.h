@@ -45,7 +45,7 @@ class Transaction {
     Status PreputAll();
     Status CommitAll();
     Status AbortAll();
-    std::unique_ptr<Options> _options;
+    Options _options;
     std::unique_ptr<brpc::ChannelOptions> _channel_options;
     std::unique_ptr<brpc::Channel> _txplanner;
     std::unique_ptr<brpc::Channel> _storage;

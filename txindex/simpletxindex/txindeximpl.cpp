@@ -22,6 +22,23 @@ extern "C" void* CallbackWrapper(void* arg) {
     return nullptr;
 }
 
+// todo: need to consider the ltv in the storage
+#define CHECK_WRITE_TOO_LATE(type)                                        \
+    do {                                                                  \
+        auto ltv = mv.LargestTSValue();                                   \
+        if (ltv.first >= txid.start_ts()) {                               \
+            ss << "Tx(" << txid.ShortDebugString() << ") write " << #type \
+               << " on "                                                  \
+               << "key: " << key << " too late. "                         \
+               << "Find "                                                 \
+               << "largest ts: " << ltv.first                             \
+               << " value: " << ltv.second->ShortDebugString();           \
+            sts.set_error_code(TxOpStatus_Code_WriteTooLate);             \
+            sts.set_error_message(ss.str());                              \
+            return sts;                                                   \
+        }                                                                 \
+    } while (0);
+
 namespace azino {
 namespace {
 
@@ -32,22 +49,24 @@ class MVCCValue {
     ~MVCCValue() = default;
     bool HasLock() const { return _has_lock; }
     bool HasIntent() const { return _has_intent; }
-    std::pair<TimeStamp, Value*> LargestTSValue() const {
+    TxIdentifier Holder() const { return _holder; }
+    txindex::ValuePtr IntentValue() const { return _intent_value; }
+
+    std::pair<TimeStamp, txindex::ValuePtr> LargestTSValue() const {
         if (_t2v.empty()) {
             return std::make_pair(MIN_TIMESTAMP, nullptr);
         }
         auto iter = _t2v.begin();
-        return std::make_pair(iter->first, iter->second.get());
+        return std::make_pair(iter->first, iter->second);
     }
-    TxIdentifier Holder() const { return _holder; }
-    Value* IntentValue() const { return _intent_value.get(); }
+
     // Finds committed values whose timestamp is smaller or equal than "ts"
-    std::pair<TimeStamp, Value*> Seek(TimeStamp ts) {
+    std::pair<TimeStamp, txindex::ValuePtr> Seek(TimeStamp ts) {
         auto iter = _t2v.lower_bound(ts);
         if (iter == _t2v.end()) {
             return std::make_pair(MAX_TIMESTAMP, nullptr);
         }
-        return std::make_pair(iter->first, iter->second.get());
+        return std::make_pair(iter->first, iter->second);
     }
 
     // Truncate committed values whose timestamp is smaller or equal than "ts",
@@ -63,8 +82,8 @@ class MVCCValue {
     friend class KVBucket;
     bool _has_lock;
     bool _has_intent;
-    std::unique_ptr<Value> _intent_value;
     TxIdentifier _holder;
+    txindex::ValuePtr _intent_value;
     txindex::MultiVersionValue _t2v;
 };
 
@@ -81,61 +100,42 @@ class KVBucket : public txindex::TxIndex {
 
         TxOpStatus sts;
         std::stringstream ss;
-        if (_kvs.find(key) == _kvs.end()) {
-            _kvs.insert(std::make_pair(key, new MVCCValue()));
-        }
-        MVCCValue* mv = _kvs[key].get();
-        auto ltv = mv->LargestTSValue();
 
-        if (ltv.first >= txid.start_ts()) {
-            ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
-               << "key: " << key << " too late. "
-               << "Find "
-               << "largest ts: " << ltv.first
-               << " value: " << ltv.second->ShortDebugString();
-            sts.set_error_code(TxOpStatus_Code_WriteTooLate);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            return sts;
-        }
+        MVCCValue& mv = _kvs[key];
 
-        if (mv->HasIntent() || mv->HasLock()) {
-            assert(!(mv->HasIntent() && mv->HasLock()));
-            if (txid.start_ts() != mv->Holder().start_ts()) {
+        CHECK_WRITE_TOO_LATE(lock)
+
+        if (mv.HasIntent() || mv.HasLock()) {
+            assert(!(mv.HasIntent() && mv.HasLock()));
+
+            if (txid.start_ts() != mv.Holder().start_ts()) {
                 ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
                    << "key: " << key << " blocked. "
-                   << "Find " << (mv->HasLock() ? "lock" : "intent") << " Tx("
-                   << mv->Holder().ShortDebugString() << ") value: "
-                   << (mv->HasLock() ? ""
-                                     : mv->IntentValue()->ShortDebugString());
+                   << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+                   << mv.Holder().ShortDebugString() << ") value: "
+                   << (mv.HasLock() ? ""
+                                    : mv.IntentValue()->ShortDebugString());
                 sts.set_error_code(TxOpStatus_Code_WriteBlock);
                 sts.set_error_message(ss.str());
-                LOG(INFO) << ss.str();
-                if (_blocked_ops.find(key) == _blocked_ops.end()) {
-                    _blocked_ops.insert(std::make_pair(
-                        key, std::vector<std::function<void()>>()));
-                }
                 _blocked_ops[key].push_back(callback);
                 return sts;
             }
+
             ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
                << "key: " << key << " repeated. "
-               << "Find " << (mv->HasLock() ? "lock" : "intent") << " Tx("
-               << mv->Holder().ShortDebugString() << ") value: "
-               << (mv->HasLock() ? "" : mv->IntentValue()->ShortDebugString());
+               << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+               << mv.Holder().ShortDebugString() << ") value: "
+               << (mv.HasLock() ? "" : mv.IntentValue()->ShortDebugString());
             sts.set_error_code(TxOpStatus_Code_Ok);
             sts.set_error_message(ss.str());
-            LOG(NOTICE) << ss.str();
+            LOG(WARNING) << ss.str();
             return sts;
         }
 
-        mv->_has_lock = true;
-        mv->_holder = txid;
-        ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
-           << "key: " << key << " successes. ";
+        mv._has_lock = true;
+        mv._holder = txid;
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
         return sts;
     }
 
@@ -145,74 +145,49 @@ class KVBucket : public txindex::TxIndex {
 
         TxOpStatus sts;
         std::stringstream ss;
-        if (_kvs.find(key) == _kvs.end()) {
-            _kvs.insert(std::make_pair(key, new MVCCValue()));
-        }
-        MVCCValue* mv = _kvs[key].get();
-        auto ltv = mv->LargestTSValue();
 
-        if (ltv.first >= txid.start_ts()) {
-            ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
-               << "key: " << key << " too late. "
-               << "Find "
-               << "largest ts: " << ltv.first
-               << " value: " << ltv.second->ShortDebugString();
-            sts.set_error_code(TxOpStatus_Code_WriteTooLate);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            return sts;
-        }
+        MVCCValue& mv = _kvs[key];
 
-        if (mv->HasIntent() || mv->HasLock()) {
-            assert(!(mv->HasIntent() && mv->HasLock()));
-            if (txid.start_ts() != mv->Holder().start_ts()) {
+        CHECK_WRITE_TOO_LATE(intent)
+
+        if (mv.HasIntent() || mv.HasLock()) {
+            assert(!(mv.HasIntent() && mv.HasLock()));
+
+            if (txid.start_ts() != mv.Holder().start_ts()) {
                 ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
                    << "key: " << key << " conflicts. "
-                   << "Find " << (mv->HasLock() ? "lock" : "intent") << " Tx("
-                   << mv->Holder().ShortDebugString() << ") value: "
-                   << (mv->HasLock() ? ""
-                                     : mv->IntentValue()->ShortDebugString());
+                   << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+                   << mv.Holder().ShortDebugString() << ") value: "
+                   << (mv.HasLock() ? ""
+                                    : mv.IntentValue()->ShortDebugString());
                 sts.set_error_code(TxOpStatus_Code_WriteConflicts);
                 sts.set_error_message(ss.str());
-                LOG(INFO) << ss.str();
                 return sts;
             }
-            if (mv->HasIntent()) {
+
+            if (mv.HasIntent()) {
                 ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
                    << "key: " << key << " repeated. "
                    << "Find "
                    << "intent"
-                   << " Tx(" << mv->Holder().ShortDebugString()
-                   << ") value: " << mv->IntentValue()->ShortDebugString();
+                   << " Tx(" << mv.Holder().ShortDebugString()
+                   << ") value: " << mv.IntentValue()->ShortDebugString();
                 sts.set_error_code(TxOpStatus_Code_Ok);
                 sts.set_error_message(ss.str());
-                LOG(NOTICE) << ss.str();
+                LOG(WARNING) << ss.str();
                 return sts;
+            } else {
+                // go down
+                ;
             }
-
-            mv->_has_lock = false;
-            mv->_has_intent = true;
-            mv->_holder = txid;
-            mv->_intent_value.reset(new Value(v));
-            ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
-               << "key: " << key << " successes. "
-               << "Find "
-               << "lock"
-               << " Tx(" << mv->Holder().ShortDebugString() << ") value: ";
-            sts.set_error_code(TxOpStatus_Code_Ok);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            return sts;
         }
 
-        mv->_has_intent = true;
-        mv->_holder = txid;
-        mv->_intent_value.reset(new Value(v));
-        ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
-           << "key: " << key << " successes. ";
+        mv._has_lock = false;
+        mv._has_intent = true;
+        mv._holder = txid;
+        mv._intent_value.reset(new Value(v));
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
         return sts;
     }
 
@@ -222,21 +197,22 @@ class KVBucket : public txindex::TxIndex {
 
         TxOpStatus sts;
         std::stringstream ss;
-        auto iter = _kvs.find(key);
-        if (iter == _kvs.end() ||
-            (!iter->second->HasLock() && !iter->second->HasIntent()) ||
-            iter->second->Holder().start_ts() != txid.start_ts()) {
+
+        MVCCValue& mv = _kvs[key];
+
+        if ((!mv.HasLock() && !mv.HasIntent()) ||
+            mv.Holder().start_ts() != txid.start_ts()) {
             ss << "Tx(" << txid.ShortDebugString() << ") clean on "
                << "key: " << key << " not exist. ";
-            if (iter != _kvs.end()) {
-                assert(!(iter->second->HasIntent() && iter->second->HasLock()));
-                ss << "Find " << (iter->second->HasLock() ? "lock" : "intent")
-                   << " Tx(" << iter->second->Holder().ShortDebugString()
-                   << ") value: "
-                   << (iter->second->HasLock()
-                           ? ""
-                           : iter->second->IntentValue()->ShortDebugString());
+
+            if (mv.HasLock() || mv.HasIntent()) {
+                assert(!(mv.HasIntent() && mv.HasLock()));
+                ss << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+                   << mv.Holder().ShortDebugString() << ") value: "
+                   << (mv.HasLock() ? ""
+                                    : mv.IntentValue()->ShortDebugString());
             }
+
             sts.set_error_code(TxOpStatus_Code_CleanNotExist);
             sts.set_error_message(ss.str());
             LOG(WARNING) << ss.str();
@@ -245,19 +221,17 @@ class KVBucket : public txindex::TxIndex {
 
         ss << "Tx(" << txid.ShortDebugString() << ") clean on "
            << "key: " << key << " success. "
-           << "Find " << (iter->second->HasLock() ? "lock" : "intent") << " Tx("
-           << iter->second->Holder().ShortDebugString() << ") value: "
-           << (iter->second->HasLock()
-                   ? ""
-                   : iter->second->IntentValue()->ShortDebugString());
+           << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+           << mv.Holder().ShortDebugString() << ") value: "
+           << (mv.HasLock() ? "" : mv.IntentValue()->ShortDebugString());
+
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
 
-        iter->second->_holder.Clear();
-        iter->second->_intent_value.reset(nullptr);
-        iter->second->_has_intent = false;
-        iter->second->_has_lock = false;
+        mv._holder.Clear();
+        mv._intent_value.reset();
+        mv._has_intent = false;
+        mv._has_lock = false;
 
         if (_blocked_ops.find(key) != _blocked_ops.end()) {
             auto iter = _blocked_ops.find(key);
@@ -281,20 +255,21 @@ class KVBucket : public txindex::TxIndex {
 
         TxOpStatus sts;
         std::stringstream ss;
-        auto iter = _kvs.find(key);
-        if (iter == _kvs.end() || !iter->second->HasIntent() ||
-            iter->second->Holder().start_ts() != txid.start_ts()) {
+
+        MVCCValue& mv = _kvs[key];
+
+        if (!mv.HasIntent() || mv.Holder().start_ts() != txid.start_ts()) {
             ss << "Tx(" << txid.ShortDebugString() << ") commit on "
                << "key: " << key << " not exist. ";
-            if (iter != _kvs.end()) {
-                assert(!(iter->second->HasIntent() && iter->second->HasLock()));
-                ss << "Find " << (iter->second->HasLock() ? "lock" : "intent")
-                   << " Tx(" << iter->second->Holder().ShortDebugString()
-                   << ") value: "
-                   << (iter->second->HasLock()
-                           ? ""
-                           : iter->second->IntentValue()->ShortDebugString());
+
+            if (mv.HasLock() || mv.HasIntent()) {
+                assert(!(mv.HasIntent() && mv.HasLock()));
+                ss << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+                   << mv.Holder().ShortDebugString() << ") value: "
+                   << (mv.HasLock() ? ""
+                                    : mv.IntentValue()->ShortDebugString());
             }
+
             sts.set_error_code(TxOpStatus_Code_CommitNotExist);
             sts.set_error_message(ss.str());
             LOG(WARNING) << ss.str();
@@ -303,19 +278,17 @@ class KVBucket : public txindex::TxIndex {
 
         ss << "Tx(" << txid.ShortDebugString() << ") commit on "
            << "key: " << key << " success. "
-           << "Find "
-           << "intent"
-           << " Tx(" << iter->second->Holder().ShortDebugString()
-           << ") value: " << iter->second->IntentValue()->ShortDebugString();
+           << "Find " << (mv.HasLock() ? "lock" : "intent") << " Tx("
+           << mv.Holder().ShortDebugString() << ") value: "
+           << (mv.HasLock() ? "" : mv.IntentValue()->ShortDebugString());
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
 
-        iter->second->_holder.Clear();
-        iter->second->_t2v.insert(std::make_pair(
-            txid.commit_ts(), std::move(iter->second->_intent_value)));
-        iter->second->_has_intent = false;
-        iter->second->_has_lock = false;
+        mv._holder.Clear();
+        mv._t2v.insert(
+            std::make_pair(txid.commit_ts(), std::move(mv._intent_value)));
+        mv._has_intent = false;
+        mv._has_lock = false;
 
         if (_blocked_ops.find(key) != _blocked_ops.end()) {
             auto iter = _blocked_ops.find(key);
@@ -340,55 +313,40 @@ class KVBucket : public txindex::TxIndex {
 
         TxOpStatus sts;
         std::stringstream ss;
-        auto iter = _kvs.find(key);
-        if (iter == _kvs.end()) {
-            ss << "Tx(" << txid.ShortDebugString() << ") read on "
-               << "key: " << key << " not exist. ";
-            sts.set_error_code(TxOpStatus_Code_ReadNotExist);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            return sts;
-        }
 
-        if ((iter->second->HasIntent() || iter->second->HasLock()) &&
-            iter->second->Holder().start_ts() == txid.start_ts()) {
-            assert(!(iter->second->HasIntent() && iter->second->HasLock()));
+        MVCCValue& mv = _kvs[key];
+
+        if ((mv.HasIntent() || mv.HasLock()) &&
+            mv.Holder().start_ts() == txid.start_ts()) {
+            assert(!(mv.HasIntent() && mv.HasLock()));
+
             ss << "Tx(" << txid.ShortDebugString() << ") read on "
                << "key: " << key << " not exist. "
-               << "Find its own "
-               << (iter->second->HasLock() ? "lock" : "intent") << " Tx("
-               << iter->second->Holder().ShortDebugString() << ") value: "
-               << (iter->second->HasLock()
-                       ? ""
-                       : iter->second->IntentValue()->ShortDebugString());
+               << "Find it's own " << (mv.HasLock() ? "lock" : "intent")
+               << " Tx(" << mv.Holder().ShortDebugString() << ") value: "
+               << (mv.HasLock() ? "" : mv.IntentValue()->ShortDebugString());
             sts.set_error_code(TxOpStatus_Code_ReadNotExist);
             sts.set_error_message(ss.str());
             LOG(ERROR) << ss.str();
             return sts;
         }
 
-        if (iter->second->HasIntent() &&
-            iter->second->Holder().start_ts() < txid.start_ts()) {
-            assert(!iter->second->HasLock());
+        if (mv.HasIntent() && mv.Holder().start_ts() < txid.start_ts()) {
+            assert(!mv.HasLock());
+
             ss << "Tx(" << txid.ShortDebugString() << ") read on "
                << "key: " << key << " blocked. "
                << "Find "
                << "intent"
-               << " Tx(" << iter->second->Holder().ShortDebugString()
-               << ") value: "
-               << iter->second->IntentValue()->ShortDebugString();
+               << " Tx(" << mv.Holder().ShortDebugString()
+               << ") value: " << mv.IntentValue()->ShortDebugString();
             sts.set_error_code(TxOpStatus_Code_ReadBlock);
             sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            if (_blocked_ops.find(key) == _blocked_ops.end()) {
-                _blocked_ops.insert(
-                    std::make_pair(key, std::vector<std::function<void()>>()));
-            }
             _blocked_ops[key].push_back(callback);
             return sts;
         }
 
-        auto sv = iter->second->Seek(txid.start_ts());
+        auto sv = mv.Seek(txid.start_ts());
         if (sv.first <= txid.start_ts()) {
             ss << "Tx(" << txid.ShortDebugString() << ") read on "
                << "key: " << key << " success. "
@@ -397,7 +355,6 @@ class KVBucket : public txindex::TxIndex {
                << " value: " << sv.second->ShortDebugString();
             sts.set_error_code(TxOpStatus_Code_Ok);
             sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
             v.CopyFrom(*(sv.second));
             return sts;
         }
@@ -406,7 +363,6 @@ class KVBucket : public txindex::TxIndex {
            << "key: " << key << " not exist. ";
         sts.set_error_code(TxOpStatus_Code_ReadNotExist);
         sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
         return sts;
     }
 
@@ -418,30 +374,26 @@ class KVBucket : public txindex::TxIndex {
         std::stringstream ss;
         unsigned long cnt = 0;
         for (auto& it : _kvs) {
-            if (it.second->_t2v.empty()) {
+            if (it.second._t2v.empty()) {
                 continue;
             }
             txindex::DataToPersist d;
             d.key = it.first;
-            d.t2vs = it.second->_t2v;
-            cnt += it.second->_t2v.size();
+            d.t2vs = it.second._t2v;
+            cnt += it.second._t2v.size();
             datas.push_back(d);
         }
         if (cnt == 0) {
             sts.set_error_code(TxOpStatus_Code_NoneToPersist);
-            ss << "Get data to persist fail. "
-               << "Persist key num: " << datas.size()
-               << "Persist value num: " << cnt;
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
         } else {
             sts.set_error_code(TxOpStatus_Code_Ok);
-            ss << "Get data to persist success. "
-               << "Persist key num: " << datas.size()
-               << "Persist value num: " << cnt;
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
         }
+
+        ss << "Get data to persist. "
+           << "Persist key num: " << datas.size()
+           << "Persist value num: " << cnt;
+        sts.set_error_message(ss.str());
+        LOG(INFO) << ss.str();
         return sts;
     }
 
@@ -460,7 +412,7 @@ class KVBucket : public txindex::TxIndex {
                    << "repeat clear due to no key in _kvs.";
                 break;
             }
-            auto n = _kvs[it.key]->Truncate(it.t2vs.begin()->first);
+            auto n = _kvs[it.key].Truncate(it.t2vs.begin()->first);
             cnt += n;
             if (it.t2vs.size() != n) {
                 sts.set_error_code(TxOpStatus_Code_ClearRepeat);
@@ -483,7 +435,7 @@ class KVBucket : public txindex::TxIndex {
     }
 
    private:
-    std::unordered_map<std::string, std::unique_ptr<MVCCValue>> _kvs;
+    std::unordered_map<std::string, MVCCValue> _kvs;
     std::unordered_map<std::string, std::vector<std::function<void()>>>
         _blocked_ops;
     bthread::Mutex _latch;
@@ -495,9 +447,6 @@ class TxIndexImpl : public txindex::TxIndex {
         : _kvbs(FLAGS_latch_bucket_num),
           _persistor(this, storage_addr),
           _last_persist_bucket_num(0) {
-        for (auto& it : _kvbs) {
-            it.reset(new KVBucket());
-        }
         if (FLAGS_enable_persistor) {
             _persistor.Start();
         }
@@ -512,33 +461,38 @@ class TxIndexImpl : public txindex::TxIndex {
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
                                  std::function<void()> callback) override {
+        // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num]->WriteLock(key, txid, callback);
+        return _kvbs[bucket_num].WriteLock(key, txid, callback);
     }
 
-    virtual TxOpStatus WriteIntent(const std::string& key, const Value& v,
+    virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
                                    const TxIdentifier& txid) override {
+        // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num]->WriteIntent(key, v, txid);
+        return _kvbs[bucket_num].WriteIntent(key, value, txid);
     }
 
     virtual TxOpStatus Clean(const std::string& key,
                              const TxIdentifier& txid) override {
+        // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num]->Clean(key, txid);
+        return _kvbs[bucket_num].Clean(key, txid);
     }
 
     virtual TxOpStatus Commit(const std::string& key,
                               const TxIdentifier& txid) override {
+        // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num]->Commit(key, txid);
+        return _kvbs[bucket_num].Commit(key, txid);
     }
 
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
                             std::function<void()> callback) override {
+        // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num]->Read(key, v, txid, callback);
+        return _kvbs[bucket_num].Read(key, v, txid, callback);
     }
 
     virtual TxOpStatus GetPersisting(
@@ -547,11 +501,7 @@ class TxIndexImpl : public txindex::TxIndex {
         for (int i = 0; i < FLAGS_latch_bucket_num; i++) {
             _last_persist_bucket_num++;
             res = _kvbs[_last_persist_bucket_num % FLAGS_latch_bucket_num]
-                      ->GetPersisting(datas);
-            if (res.error_code() == TxOpStatus_Code_Ok) {
-                assert(!datas.empty());
-                return res;
-            }
+                      .GetPersisting(datas);
         }
         return res;
     }
@@ -559,11 +509,11 @@ class TxIndexImpl : public txindex::TxIndex {
     virtual TxOpStatus ClearPersisted(
         const std::vector<txindex::DataToPersist>& datas) override {
         return _kvbs[_last_persist_bucket_num % FLAGS_latch_bucket_num]
-            ->ClearPersisted(datas);
+            .ClearPersisted(datas);
     }
 
    private:
-    std::vector<std::unique_ptr<KVBucket>> _kvbs;
+    std::vector<KVBucket> _kvbs;
     txindex::Persistor _persistor;
     uint32_t _last_persist_bucket_num;
 };

@@ -13,9 +13,12 @@ DECLARE_int32(latch_bucket_num);
 
 namespace azino {
 namespace txindex {
+
 struct DataToPersist;
-typedef std::map<TimeStamp, std::shared_ptr<Value>, std::greater<TimeStamp>>
+typedef std::shared_ptr<Value> ValuePtr;
+typedef std::map<TimeStamp, ValuePtr, std::greater<TimeStamp>>
     MultiVersionValue;
+
 class TxIndex {
    public:
     // return the default index impl
@@ -39,7 +42,7 @@ class TxIndex {
     // pessimistic and optimistic transactions. Success when no newer version of
     // this key, intent or lock exists. Should success if txid already hold this
     // intent or lock, and change lock to intent at the same time.
-    virtual TxOpStatus WriteIntent(const std::string& key, const Value& v,
+    virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
                                    const TxIdentifier& txid) = 0;
 
     // This is an atomic read-write operation for one user_key, used in both
@@ -67,10 +70,12 @@ class TxIndex {
     virtual TxOpStatus ClearPersisted(
         const std::vector<DataToPersist>& datas) = 0;
 };
+
 struct DataToPersist {
     std::string key;
     MultiVersionValue t2vs;
 };
+
 }  // namespace txindex
 }  // namespace azino
 

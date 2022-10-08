@@ -64,15 +64,16 @@ class Storage {
     // and tag "is_delete".  Returns OK on success, and a non-OK status on
     // error.
     virtual StorageStatus BatchStore(const std::vector<Data>& datas) = 0;
+
     // Add a database entry for "key" to "value" with timestamp "ts".  Returns
     // OK on success, and a non-OK status on error.
-
     virtual StorageStatus MVCCPut(const std::string& key, TimeStamp ts,
                                   const std::string& value) {
         auto internal_key = InternalKey(key, ts, false);
         StorageStatus ss = Put(internal_key.Encode(), value);
         return ss;
     }
+
     // Add a database entry (if any) for "key" with timestamp "ts" to indicate
     // the value is deleted.  Returns OK on success, and a non-OK status on
     // error.  It is not an error if "key" did not exist in the database.
@@ -81,6 +82,7 @@ class Storage {
         StorageStatus ss = Put(internal_key.Encode(), "");
         return ss;
     }
+
     // If the database contains an entry for "key" and has a smaller timestamp,
     // store the corresponding value in value and return OK.
     //
@@ -95,19 +97,20 @@ class Storage {
         std::string found_key, found_value;
         StorageStatus ss = Seek(internal_key.Encode(), found_key, found_value);
         std::stringstream strs;
-        if (ss.error_code() != StorageStatus::Ok) {
-            return ss;
-        } else {
+
+        if (ss.error_code() == StorageStatus::Ok) {
             auto found_internal_key = InternalKey(found_key);
             bool isValid = found_internal_key.Valid();
             bool isMatch = found_internal_key.UserKey() == key;
             bool isDeleted = found_internal_key.IsDelete();
             if (!isValid) {
                 ss.set_error_code(StorageStatus_Code_Corruption);
+                strs << " Fail to find mvcc key: " << key << " read ts: " << ts;
+                ss.set_error_message(strs.str());
                 return ss;
             } else if (!isMatch) {
                 ss.set_error_code(StorageStatus_Code_NotFound);
-                strs << " Fail to find mvcc key: " << key << " read ts: " << ts
+                strs << " Not found mvcc key: " << key << " read ts: " << ts
                      << " found key: " << found_internal_key.UserKey()
                      << " found ts: " << seeked_ts
                      << " found value: " << found_value;
@@ -115,19 +118,26 @@ class Storage {
                 return ss;
             } else if (isDeleted) {
                 ss.set_error_code(StorageStatus_Code_NotFound);
-                strs << " Fail to find mvcc key: " << key << " read ts: " << ts
+                strs << " Not found mvcc key: " << key << " read ts: " << ts
                      << " found ts: " << seeked_ts << " who's value is deleted";
                 ss.set_error_message(strs.str());
                 return ss;
             } else {
                 value = found_value;
                 seeked_ts = found_internal_key.TS();
-                strs << " Success to find mvcc key: " << key
-                     << " read ts: " << ts << " found ts: " << seeked_ts
-                     << " found value: " << found_value;
+                ss.set_error_code(StorageStatus_Code_Ok);
+                strs << " Found mvcc key: " << key << " read ts: " << ts;
                 ss.set_error_message(strs.str());
                 return ss;
             }
+        } else if (ss.error_code() == StorageStatus::NotFound) {
+            ss.set_error_code(StorageStatus_Code_NotFound);
+            strs << " Not found mvcc key: " << key << " read ts: " << ts
+                 << " db iter ends ";
+            ss.set_error_message(strs.str());
+            return ss;
+        } else {
+            return ss;
         }
     }
 };

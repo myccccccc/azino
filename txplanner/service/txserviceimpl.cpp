@@ -37,21 +37,20 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    std::stringstream ss;
     auto txstatus = new TxStatus();
     txstatus->set_status_code(TxStatus_Code_Started);
     auto start_ts = _timer->NewTime();
     auto txid = new TxIdentifier();
     txid->set_start_ts(start_ts);
     txid->set_allocated_status(txstatus);
-    ss << cntl->remote_side() << " tx: " << txid->ShortDebugString()
-       << " is going to begin.";
-    LOG(INFO) << ss.str();
     response->set_allocated_txid(txid);
     for (std::string &addr : _txindex_addrs) {
         response->add_txindex_addrs(addr);
     }
     response->set_storage_addr(_storage_addr);
+
+    LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
+              << " is going to begin.";
 }
 
 void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
@@ -75,10 +74,10 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
     txid->set_start_ts(request->txid().start_ts());
     txid->set_commit_ts(commit_ts);
     txid->set_allocated_status(txstatus);
-    ss << cntl->remote_side() << " tx: " << txid->ShortDebugString()
-       << " is going to commit.";
-    LOG(INFO) << ss.str();
     response->set_allocated_txid(txid);
+
+    LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
+              << " is going to commit.";
 }
 }  // namespace txplanner
 }  // namespace azino
