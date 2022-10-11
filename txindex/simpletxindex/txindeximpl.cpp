@@ -10,6 +10,7 @@
 
 #include "index.h"
 #include "persistor.h"
+#include "reporter.h"
 
 DEFINE_int32(latch_bucket_num, 1024, "latch buckets number");
 DEFINE_bool(enable_persistor, false,
@@ -37,6 +38,24 @@ extern "C" void* CallbackWrapper(void* arg) {
             sts.set_error_message(ss.str());                              \
             return sts;                                                   \
         }                                                                 \
+    } while (0);
+
+#define CHECK_WRITE_WRITE_DEP(mv, txid, deps)                         \
+    do {                                                              \
+        auto ltv = mv.LargestTSValue();                               \
+        if (ltv.first != MIN_TIMESTAMP) {                             \
+            deps.push_back(txindex::Dep{txindex::DepType::WRITEWRITE, \
+                                        ltv.first, txid.start_ts()}); \
+        }                                                             \
+    } while (0);
+
+#define CHECK_READ_WRITE_DEP(mv, txid, deps)                            \
+    do {                                                                \
+        for (auto iter = mv._readers_since_last_write.begin();          \
+             iter != mv._readers_since_last_write.end(); iter++) {      \
+            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,    \
+                                        iter->first, txid.start_ts()}); \
+        }                                                               \
     } while (0);
 
 namespace azino {
@@ -69,6 +88,16 @@ class MVCCValue {
         return std::make_pair(iter->first, iter->second);
     }
 
+    // Finds committed values whose timestamp is bigger than "ts"
+    std::pair<TimeStamp, txindex::ValuePtr> ReverseSeek(TimeStamp ts) {
+        auto iter = _t2v.lower_bound(ts);
+        if (iter == _t2v.begin()) {
+            return std::make_pair(MIN_TIMESTAMP, nullptr);
+        }
+        iter--;
+        return std::make_pair(iter->first, iter->second);
+    }
+
     // Truncate committed values whose timestamp is smaller or equal than "ts",
     // return the number of values truncated
     unsigned Truncate(TimeStamp ts) {
@@ -78,6 +107,12 @@ class MVCCValue {
         return ans - _t2v.size();
     }
 
+    void AddReader(const TxIdentifier& txid) {
+        _readers_since_last_write[txid.start_ts()] = txid;
+    }
+
+    void ClearReaders() { _readers_since_last_write.clear(); }
+
    private:
     friend class KVBucket;
     bool _has_lock;
@@ -85,6 +120,7 @@ class MVCCValue {
     TxIdentifier _holder;
     txindex::ValuePtr _intent_value;
     txindex::MultiVersionValue _t2v;
+    std::unordered_map<TimeStamp, TxIdentifier> _readers_since_last_write;
 };
 
 class KVBucket : public txindex::TxIndex {
@@ -95,7 +131,8 @@ class KVBucket : public txindex::TxIndex {
 
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback) override {
+                                 std::function<void()> callback,
+                                 std::vector<txindex::Dep>& deps) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
@@ -132,6 +169,9 @@ class KVBucket : public txindex::TxIndex {
             return sts;
         }
 
+        CHECK_WRITE_WRITE_DEP(mv, txid, deps)
+        CHECK_READ_WRITE_DEP(mv, txid, deps)
+
         mv._has_lock = true;
         mv._holder = txid;
         sts.set_error_code(TxOpStatus_Code_Ok);
@@ -140,7 +180,8 @@ class KVBucket : public txindex::TxIndex {
     }
 
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& v,
-                                   const TxIdentifier& txid) override {
+                                   const TxIdentifier& txid,
+                                   std::vector<txindex::Dep>& deps) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
@@ -181,6 +222,9 @@ class KVBucket : public txindex::TxIndex {
                 ;
             }
         }
+
+        CHECK_WRITE_WRITE_DEP(mv, txid, deps)
+        CHECK_READ_WRITE_DEP(mv, txid, deps)
 
         mv._has_lock = false;
         mv._has_intent = true;
@@ -289,6 +333,7 @@ class KVBucket : public txindex::TxIndex {
             std::make_pair(txid.commit_ts(), std::move(mv._intent_value)));
         mv._has_intent = false;
         mv._has_lock = false;
+        mv.ClearReaders();
 
         if (_blocked_ops.find(key) != _blocked_ops.end()) {
             auto iter = _blocked_ops.find(key);
@@ -308,7 +353,8 @@ class KVBucket : public txindex::TxIndex {
 
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback) override {
+                            std::function<void()> callback,
+                            std::vector<txindex::Dep>& deps) override {
         std::lock_guard<bthread::Mutex> lck(_latch);
 
         TxOpStatus sts;
@@ -346,8 +392,33 @@ class KVBucket : public txindex::TxIndex {
             return sts;
         }
 
+        // uncommitted RW dep
+        if (mv.HasIntent() || mv.HasLock()) {
+            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
+                                        txid.start_ts(),
+                                        mv.Holder().start_ts()});
+        }
+
+        auto rsv = mv.ReverseSeek(txid.start_ts());
+        if (rsv.first > txid.start_ts()) {
+            // committed RW dep
+            // todo: 是应该找到所有 ts 比 read_ts 大的吗，还是只用找一个。。
+            // 现在是只找了一个
+            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
+                                        txid.start_ts(), rsv.first});
+        }
+
         auto sv = mv.Seek(txid.start_ts());
         if (sv.first <= txid.start_ts()) {
+            // WR dep
+            deps.push_back(txindex::Dep{txindex::DepType::WRITEREAD, sv.first,
+                                        txid.start_ts()});
+
+            // add reader if it reads the newest committed value
+            if (sv.first == mv.LargestTSValue().first) {
+                mv.AddReader(txid);
+            }
+
             ss << "Tx(" << txid.ShortDebugString() << ") read on "
                << "key: " << key << " success. "
                << "Find "
@@ -357,6 +428,11 @@ class KVBucket : public txindex::TxIndex {
             sts.set_error_message(ss.str());
             v.CopyFrom(*(sv.second));
             return sts;
+        }
+
+        if (mv._t2v.empty()) {
+            // no committed value yet, add a reader
+            mv.AddReader(txid);
         }
 
         ss << "Tx(" << txid.ShortDebugString() << ") read on "
@@ -460,17 +536,19 @@ class TxIndexImpl : public txindex::TxIndex {
 
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback) override {
+                                 std::function<void()> callback,
+                                 std::vector<txindex::Dep>& deps) override {
         // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num].WriteLock(key, txid, callback);
+        return _kvbs[bucket_num].WriteLock(key, txid, callback, deps);
     }
 
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid) override {
+                                   const TxIdentifier& txid,
+                                   std::vector<txindex::Dep>& deps) override {
         // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num].WriteIntent(key, value, txid);
+        return _kvbs[bucket_num].WriteIntent(key, value, txid, deps);
     }
 
     virtual TxOpStatus Clean(const std::string& key,
@@ -489,10 +567,11 @@ class TxIndexImpl : public txindex::TxIndex {
 
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback) override {
+                            std::function<void()> callback,
+                            std::vector<txindex::Dep>& deps) override {
         // todo: use a wrapper, and another hash function
         auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-        return _kvbs[bucket_num].Read(key, v, txid, callback);
+        return _kvbs[bucket_num].Read(key, v, txid, callback, deps);
     }
 
     virtual TxOpStatus GetPersisting(

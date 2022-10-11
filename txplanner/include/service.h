@@ -33,6 +33,25 @@ class TxServiceImpl : public TxService {
     std::string _storage_addr;  // storage addresses in form of "0.0.0.0:8000"
 };
 
+class DependenceServiceImpl : public DependenceService {
+   public:
+    DependenceServiceImpl();
+    ~DependenceServiceImpl();
+
+    virtual void RWDep(::google::protobuf::RpcController* controller,
+                       const ::azino::txplanner::DepRequest* request,
+                       ::azino::txplanner::DepResponse* response,
+                       ::google::protobuf::Closure* done) override;
+    virtual void WWDep(::google::protobuf::RpcController* controller,
+                       const ::azino::txplanner::DepRequest* request,
+                       ::azino::txplanner::DepResponse* response,
+                       ::google::protobuf::Closure* done) override;
+    virtual void WRDep(::google::protobuf::RpcController* controller,
+                       const ::azino::txplanner::DepRequest* request,
+                       ::azino::txplanner::DepResponse* response,
+                       ::google::protobuf::Closure* done) override;
+};
+
 }  // namespace txplanner
 }  // namespace azino
 #endif  // AZINO_TXPLANNER_INCLUDE_SERVICE_H

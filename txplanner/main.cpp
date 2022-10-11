@@ -39,6 +39,13 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    azino::txplanner::DependenceServiceImpl dep_service_impl;
+    if (server.AddService(&dep_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
+        0) {
+        LOG(FATAL) << "Fail to add dep_service_impl";
+        return -1;
+    }
+
     brpc::ServerOptions options;
     if (server.Start(FLAGS_txplanner_addr.c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to start TxPlannerServer";

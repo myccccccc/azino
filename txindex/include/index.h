@@ -6,6 +6,7 @@
 
 #include "azino/kv.h"
 #include "gflags/gflags.h"
+#include "reporter.h"
 #include "service/kv.pb.h"
 #include "service/tx.pb.h"
 
@@ -36,14 +37,16 @@ class TxIndex {
     // intent or lock exists. Should success if txid already hold this lock.
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback) = 0;
+                                 std::function<void()> callback,
+                                 std::vector<Dep>& deps) = 0;
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when no newer version of
     // this key, intent or lock exists. Should success if txid already hold this
     // intent or lock, and change lock to intent at the same time.
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid) = 0;
+                                   const TxIdentifier& txid,
+                                   std::vector<Dep>& deps) = 0;
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when it finds and cleans
@@ -63,7 +66,8 @@ class TxIndex {
     // has the biggest ts among all that have ts smaller than read's ts.
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback) = 0;
+                            std::function<void()> callback,
+                            std::vector<Dep>& deps) = 0;
 
     virtual TxOpStatus GetPersisting(std::vector<DataToPersist>& datas) = 0;
 

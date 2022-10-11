@@ -327,8 +327,8 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
     }
 
     auto iter = _txwritebuffer->find(key);
-    if ((iter == _txwritebuffer->end()) ||
-        (options.type == kPessimistic &&
+    if (options.type == kPessimistic &&
+        (iter == _txwritebuffer->end() ||
          iter->second.status != TxWriteStatus::LOCKED)) {
         // Pessimistic
 
@@ -352,6 +352,8 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
 
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
+                _txwritebuffer->Upsert(options, key, is_delete, value);
+                iter = _txwritebuffer->find(key);
                 iter->second.status = TxWriteStatus::LOCKED;
                 break;
             default:
@@ -362,9 +364,9 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
                    << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
+    } else {
+        _txwritebuffer->Upsert(options, key, is_delete, value);
     }
-
-    _txwritebuffer->Upsert(options, key, is_delete, value);
 
     return Status::Ok();
 }

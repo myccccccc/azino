@@ -9,11 +9,13 @@
 
 namespace azino {
 namespace txindex {
+class DepReporter;
 class TxIndex;
 
 class TxOpServiceImpl : public TxOpService {
    public:
-    TxOpServiceImpl(const std::string& storage_addr);
+    TxOpServiceImpl(const std::string& storage_addr,
+                    const std::string& txplanner_addr);
     DISALLOW_COPY_AND_ASSIGN(TxOpServiceImpl);
     ~TxOpServiceImpl();
 
@@ -41,6 +43,7 @@ class TxOpServiceImpl : public TxOpService {
 
    private:
     std::unique_ptr<TxIndex> _index;
+    std::unique_ptr<DepReporter> _deprpt;
 };
 }  // namespace txindex
 }  // namespace azino

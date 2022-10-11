@@ -27,3 +27,19 @@ service TxService {
   rpc BeginTx(BeginTxRequest) returns (BeginTxResponse);
   rpc CommitTx(CommitTxRequest) returns (CommitTxResponse);
 }
+
+message DepRequest {
+  optional string key = 1;
+  optional uint64 tx1_ts = 2; // can be start_ts or commit_ts
+  optional uint64 tx2_ts = 3; // can be start_ts or commit_ts
+}
+
+message DepResponse {
+
+}
+
+service DependenceService {
+  rpc RWDep(DepRequest) returns (DepResponse);
+  rpc WWDep(DepRequest) returns (DepResponse);
+  rpc WRDep(DepRequest) returns (DepResponse);
+}
