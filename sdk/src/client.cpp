@@ -110,6 +110,10 @@ Status Transaction::Commit() {
     std::stringstream ss;
     Status preput_sts = Status::Ok();
     Status commit_sts = Status::Ok();
+    azino::txplanner::TxService_Stub stub(_txplanner.get());
+    brpc::Controller cntl;
+    azino::txplanner::CommitTxRequest req;
+    azino::txplanner::CommitTxResponse resp;
     if (!_txid) {
         ss << " Transaction has not began. ";
         return Status::IllegalTxOp(ss.str());
@@ -120,12 +124,16 @@ Status Transaction::Commit() {
         return Status::IllegalTxOp(ss.str());
     }
 
-    // todo: commit op should be issused after preputAll ok
-    azino::txplanner::TxService_Stub stub(_txplanner.get());
-    brpc::Controller cntl;
-    azino::txplanner::CommitTxRequest req;
+    auto txid_sts = _txid->release_status();
+    _txid->set_allocated_status(txid_sts);
+    txid_sts->set_status_code(TxStatus_Code_Preputting);
+
+    preput_sts = PreputAll();
+    if (!preput_sts.IsOk()) {
+        goto abort;
+    }
+
     req.set_allocated_txid(new TxIdentifier(*_txid));
-    azino::txplanner::CommitTxResponse resp;
     stub.CommitTx(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
         LOG_CONTROLLER_ERROR(cntl, ss)
@@ -135,17 +143,11 @@ Status Transaction::Commit() {
     LOG_SDK(cntl, req, resp, CommitTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    if (_txid->status().status_code() != TxStatus_Code_Preputting) {
+    txid_sts = _txid->release_status();
+    _txid->set_allocated_status(txid_sts);
+    if (_txid->status().status_code() != TxStatus_Code_Committing) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::NotSupportedErr(ss.str());
-    }
-
-    auto txid_sts = _txid->release_status();
-    _txid->set_allocated_status(txid_sts);
-
-    preput_sts = PreputAll();
-    if (!preput_sts.IsOk()) {
-        goto abort;
     }
 
     txid_sts->set_status_code(TxStatus_Code_Committing);

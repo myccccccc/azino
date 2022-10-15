@@ -63,7 +63,7 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    if (request->txid().status().status_code() != TxStatus_Code_Started) {
+    if (request->txid().status().status_code() != TxStatus_Code_Preputting) {
         LOG(WARNING) << cntl->remote_side()
                      << " tx: " << request->txid().ShortDebugString()
                      << " are not supposed to commit.";
@@ -71,7 +71,7 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
 
     std::stringstream ss;
     auto txstatus = new TxStatus();
-    txstatus->set_status_code(TxStatus_Code_Preputting);
+    txstatus->set_status_code(TxStatus_Code_Committing);
     auto commit_ts = _timer->NewTime();
     auto txid = new TxIdentifier();
     txid->set_start_ts(request->txid().start_ts());
