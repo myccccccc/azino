@@ -78,5 +78,5 @@ TEST_F(DependencyTest, graph_basic) {
     dep_set = graph->GetOutDependence(5);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::WRITEREAD, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(2, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(1, (*(dep_set.begin()))->ID());
 }
