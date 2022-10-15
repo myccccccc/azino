@@ -23,8 +23,9 @@ class AscendingTimer {
 };
 
 TxServiceImpl::TxServiceImpl(const std::vector<std::string> &txindex_addrs,
-                             const std::string &storage_adr)
+                             const std::string &storage_adr, TxIDTable *tt)
     : _timer(new AscendingTimer(MIN_TIMESTAMP)),
+      _tt(tt),
       _txindex_addrs(txindex_addrs),
       _storage_addr(storage_adr) {}
 
@@ -51,6 +52,8 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to begin.";
+
+    _tt->UpsertTxID(*txid, txid->start_ts());
 }
 
 void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
@@ -78,6 +81,8 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to commit.";
+
+    _tt->UpsertTxID(*txid, txid->start_ts(), txid->commit_ts());
 }
 }  // namespace txplanner
 }  // namespace azino

@@ -11,6 +11,11 @@ void HandleDepResponse(brpc::Controller* cntl, txplanner::DepResponse* resp) {
         LOG(WARNING) << "Fail to send dep report, " << cntl->ErrorText();
         return;
     }
+
+    if (resp->error_code() != 0) {
+        LOG(WARNING) << "Fail to send dep report, error code:"
+                     << resp->error_code();
+    }
 }
 
 DepReporter::DepReporter(const std::string& txplanner_addr) {
@@ -25,7 +30,11 @@ void DepReporter::ReadWriteReport(const std::string key, uint64_t ts1,
                                   uint64_t ts2) {
     LOG(INFO) << " Dep report type:"
               << "readwrite"
-              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2;
+              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2
+              << " ignore:" << (ts1 == ts2);
+    if (ts1 == ts2) {
+        return;
+    }
 
     brpc::Controller* cntl = new brpc::Controller();
     azino::txplanner::DepRequest req;
@@ -42,7 +51,11 @@ void DepReporter::WriteWriteReport(const std::string key, uint64_t ts1,
                                    uint64_t ts2) {
     LOG(INFO) << " Dep report type:"
               << "writewrite"
-              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2;
+              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2
+              << " ignore:" << (ts1 == ts2);
+    if (ts1 == ts2) {
+        return;
+    }
 
     brpc::Controller* cntl = new brpc::Controller();
     azino::txplanner::DepRequest req;
@@ -59,7 +72,11 @@ void DepReporter::WriteReadReport(const std::string key, uint64_t ts1,
                                   uint64_t ts2) {
     LOG(INFO) << " Dep report type:"
               << "writeread"
-              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2;
+              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2
+              << " ignore:" << (ts1 == ts2);
+    if (ts1 == ts2) {
+        return;
+    }
 
     brpc::Controller* cntl = new brpc::Controller();
     azino::txplanner::DepRequest req;

@@ -35,7 +35,7 @@ message DepRequest {
 }
 
 message DepResponse {
-
+  optional uint64 error_code = 1;
 }
 
 service DependenceService {

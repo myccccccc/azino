@@ -7,7 +7,7 @@
 namespace azino {
 namespace txplanner {
 
-DependenceServiceImpl::DependenceServiceImpl() {}
+DependenceServiceImpl::DependenceServiceImpl(TxIDTable* tt) : _tt(tt) {}
 
 DependenceServiceImpl::~DependenceServiceImpl() {}
 
@@ -18,10 +18,13 @@ void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    int error_code =
+        _tt->AddDep(DepType::READWRITE, request->tx1_ts(), request->tx2_ts());
+
     LOG(INFO) << cntl->remote_side() << " Dep report type:"
               << "readwrite"
               << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts();
+              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
 }
 void DependenceServiceImpl::WWDep(::google::protobuf::RpcController* controller,
                                   const ::azino::txplanner::DepRequest* request,
@@ -30,10 +33,13 @@ void DependenceServiceImpl::WWDep(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    int error_code =
+        _tt->AddDep(DepType::WRITEWRITE, request->tx1_ts(), request->tx2_ts());
+
     LOG(INFO) << cntl->remote_side() << " Dep report type:"
               << "writewrite"
               << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts();
+              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
 }
 void DependenceServiceImpl::WRDep(::google::protobuf::RpcController* controller,
                                   const ::azino::txplanner::DepRequest* request,
@@ -42,10 +48,13 @@ void DependenceServiceImpl::WRDep(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    int error_code =
+        _tt->AddDep(DepType::WRITEREAD, request->tx1_ts(), request->tx2_ts());
+
     LOG(INFO) << cntl->remote_side() << " Dep report type:"
               << "writeread"
               << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts();
+              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
 }
 
 }  // namespace txplanner

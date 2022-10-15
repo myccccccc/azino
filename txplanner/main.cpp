@@ -13,6 +13,7 @@ DECLARE_bool(crash_on_fatal_log);
 }
 
 #include "service.h"
+#include "txidtable.h"
 
 namespace azino {
 namespace storage {}  // namespace storage
@@ -23,6 +24,7 @@ int main(int argc, char* argv[]) {
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
 
     brpc::Server server;
+    azino::txplanner::TxIDTable tt;
 
     std::string txindex_addr;
     std::vector<std::string> txindex_addrs;
@@ -32,14 +34,14 @@ int main(int argc, char* argv[]) {
     }
 
     azino::txplanner::TxServiceImpl tx_service_impl(txindex_addrs,
-                                                    FLAGS_storage_addr);
+                                                    FLAGS_storage_addr, &tt);
     if (server.AddService(&tx_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
         0) {
         LOG(FATAL) << "Fail to add tx_service_impl";
         return -1;
     }
 
-    azino::txplanner::DependenceServiceImpl dep_service_impl;
+    azino::txplanner::DependenceServiceImpl dep_service_impl(&tt);
     if (server.AddService(&dep_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
         0) {
         LOG(FATAL) << "Fail to add dep_service_impl";
