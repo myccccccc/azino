@@ -15,22 +15,23 @@ class Dependence {
     virtual DepType Type() const = 0;
     virtual uint64_t ID() const = 0;
 };
+typedef std::shared_ptr<Dependence> DependencePtr;
 
 class DependenceHash {
    public:
-    std::size_t operator()(const Dependence* d) const {
+    std::size_t operator()(const DependencePtr& d) const {
         return std::hash<uint64_t>()(d->ID());
     }
 };
 
 class DependenceEqual {
    public:
-    bool operator()(const Dependence* d1, const Dependence* d2) const {
+    bool operator()(const DependencePtr& d1, const DependencePtr& d2) const {
         return d1->Type() == d2->Type() && d1->ID() == d2->ID();
     }
 };
 
-typedef std::unordered_set<Dependence*, DependenceHash, DependenceEqual>
+typedef std::unordered_set<DependencePtr, DependenceHash, DependenceEqual>
     DependenceSet;
 typedef std::unordered_set<uint64_t> IDSet;
 
@@ -41,7 +42,11 @@ class DependenceGraph {
     virtual IDSet ListID() = 0;
 };
 
-class DependenceChecker {};
+typedef std::vector<DependencePtr> DependenceCycle;
+class DependenceChecker {
+   public:
+    virtual DependenceCycle Check(const DependenceGraph*) = 0;
+};
 
 }  // namespace txplanner
 }  // namespace azino

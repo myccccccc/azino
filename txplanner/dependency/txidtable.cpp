@@ -8,6 +8,7 @@ class TxDependence : public Dependence {
    public:
     TxDependence(DepType type, TimeStamp target_tx_start_ts)
         : _type(type), _target_tx_start_ts(target_tx_start_ts) {}
+    virtual ~TxDependence() = default;
     virtual DepType Type() const override { return _type; }
     virtual uint64_t ID() const override { return _target_tx_start_ts; }
 
@@ -24,7 +25,8 @@ class TxID {
     TimeStamp start_ts() { return _txid.start_ts(); }
 
     void add_in_dep(DepType type, TimeStamp income_start_ts) {
-        _in.insert(new TxDependence(type, income_start_ts));
+        DependencePtr p(new TxDependence(type, income_start_ts));
+        _in.insert(p);
     }
 
     DependenceSet get_in_dep() { return _in; }
@@ -32,7 +34,8 @@ class TxID {
     DependenceSet get_out_dep() { return _out; }
 
     void add_out_dep(DepType type, TimeStamp outcome_start_ts) {
-        _out.insert(new TxDependence(type, outcome_start_ts));
+        DependencePtr p(new TxDependence(type, outcome_start_ts));
+        _out.insert(p);
     }
 
    private:
