@@ -30,8 +30,8 @@ service TxService {
 
 message DepRequest {
   optional string key = 1;
-  optional uint64 tx1_ts = 2; // can be start_ts or commit_ts
-  optional uint64 tx2_ts = 3; // can be start_ts or commit_ts
+  optional uint64 tx1_ts = 2; // can be start_ts or commit_ts, tx1_ts pointing to tx2_ts, tx1_ts happens before tx2_ts
+  optional uint64 tx2_ts = 3; // can be start_ts or commit_ts, tx2_ts depends on tx1_ts
 }
 
 message DepResponse {
