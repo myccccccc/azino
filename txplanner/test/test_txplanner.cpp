@@ -53,30 +53,36 @@ TEST_F(DependencyTest, graph_basic) {
     auto dep_set = graph->GetInDependence(1);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::WRITEREAD, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(5, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(5, (*(dep_set.begin()))->fromID());
+    ASSERT_EQ(1, (*(dep_set.begin()))->toID());
 
     dep_set = graph->GetOutDependence(1);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::READWRITE, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(2, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(2, (*(dep_set.begin()))->toID());
+    ASSERT_EQ(1, (*(dep_set.begin()))->fromID());
 
     dep_set = graph->GetInDependence(4);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::READWRITE, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(1, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(1, (*(dep_set.begin()))->fromID());
+    ASSERT_EQ(2, (*(dep_set.begin()))->toID());
 
     dep_set = graph->GetOutDependence(2);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::READWRITE, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(5, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(5, (*(dep_set.begin()))->toID());
+    ASSERT_EQ(2, (*(dep_set.begin()))->fromID());
 
     dep_set = graph->GetInDependence(5);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::READWRITE, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(2, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(2, (*(dep_set.begin()))->fromID());
+    ASSERT_EQ(5, (*(dep_set.begin()))->toID());
 
     dep_set = graph->GetOutDependence(5);
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(azino::txplanner::WRITEREAD, (*(dep_set.begin()))->Type());
-    ASSERT_EQ(1, (*(dep_set.begin()))->ID());
+    ASSERT_EQ(1, (*(dep_set.begin()))->toID());
+    ASSERT_EQ(5, (*(dep_set.begin()))->fromID());
 }

@@ -13,21 +13,23 @@ enum DepType { READWRITE = 1, WRITEWRITE = 2, WRITEREAD = 3 };
 class Dependence {
    public:
     virtual DepType Type() const = 0;
-    virtual uint64_t ID() const = 0;
+    virtual uint64_t fromID() const = 0;
+    virtual uint64_t toID() const = 0;
 };
 typedef std::shared_ptr<Dependence> DependencePtr;
 
 class DependenceHash {
    public:
     std::size_t operator()(const DependencePtr& d) const {
-        return std::hash<uint64_t>()(d->ID());
+        return std::hash<uint64_t>()(d->fromID() + d->toID());
     }
 };
 
 class DependenceEqual {
    public:
     bool operator()(const DependencePtr& d1, const DependencePtr& d2) const {
-        return d1->Type() == d2->Type() && d1->ID() == d2->ID();
+        return d1->Type() == d2->Type() && d1->fromID() == d2->fromID() &&
+               d1->toID() == d2->toID();
     }
 };
 

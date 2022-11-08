@@ -6,15 +6,20 @@ namespace txplanner {
 
 class TxDependence : public Dependence {
    public:
-    TxDependence(DepType type, TimeStamp target_tx_start_ts)
-        : _type(type), _target_tx_start_ts(target_tx_start_ts) {}
+    TxDependence(DepType type, TimeStamp from_tx_start_ts,
+                 TimeStamp to_tx_start_ts)
+        : _type(type),
+          _from_tx_start_ts(from_tx_start_ts),
+          _to_tx_start_ts(to_tx_start_ts) {}
     virtual ~TxDependence() = default;
     virtual DepType Type() const override { return _type; }
-    virtual uint64_t ID() const override { return _target_tx_start_ts; }
+    virtual uint64_t fromID() const override { return _from_tx_start_ts; }
+    virtual uint64_t toID() const override { return _to_tx_start_ts; }
 
    private:
     DepType _type;
-    TimeStamp _target_tx_start_ts;
+    TimeStamp _from_tx_start_ts;
+    TimeStamp _to_tx_start_ts;
 };
 
 class TxID {
@@ -24,8 +29,8 @@ class TxID {
 
     TimeStamp start_ts() { return _txid.start_ts(); }
 
-    void add_in_dep(DepType type, TimeStamp income_start_ts) {
-        DependencePtr p(new TxDependence(type, income_start_ts));
+    void add_in_dep(const DependencePtr& p) {
+        assert(p->toID() == _txid.start_ts());
         _in.insert(p);
     }
 
@@ -33,8 +38,8 @@ class TxID {
 
     DependenceSet get_out_dep() { return _out; }
 
-    void add_out_dep(DepType type, TimeStamp outcome_start_ts) {
-        DependencePtr p(new TxDependence(type, outcome_start_ts));
+    void add_out_dep(const DependencePtr& p) {
+        assert(p->fromID() == _txid.start_ts());
         _out.insert(p);
     }
 
@@ -106,8 +111,11 @@ int TxIDTable::AddDep(DepType type, TimeStamp ts1, TimeStamp ts2) {
         return ENOENT;
     }
 
-    _table[ts1]->add_out_dep(type, _table[ts2]->start_ts());
-    _table[ts2]->add_in_dep(type, _table[ts1]->start_ts());
+    DependencePtr p(new TxDependence(type, _table[ts1]->start_ts(),
+                                     _table[ts2]->start_ts()));
+
+    _table[ts1]->add_out_dep(p);
+    _table[ts2]->add_in_dep(p);
     return 0;
 }
 }  // namespace txplanner
