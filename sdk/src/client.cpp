@@ -114,6 +114,8 @@ Status Transaction::Commit() {
     brpc::Controller cntl;
     azino::txplanner::CommitTxRequest req;
     azino::txplanner::CommitTxResponse resp;
+    azino::txplanner::AbortTxRequest areq;
+    azino::txplanner::AbortTxResponse aresp;
     if (!_txid) {
         ss << " Transaction has not began. ";
         return Status::IllegalTxOp(ss.str());
@@ -150,7 +152,6 @@ Status Transaction::Commit() {
         return Status::NotSupportedErr(ss.str());
     }
 
-    txid_sts->set_status_code(TxStatus_Code_Committing);
     commit_sts = CommitAll();
     if (commit_sts.IsOk()) {
         txid_sts->set_status_code(TxStatus_Code_Committed);
@@ -163,7 +164,23 @@ Status Transaction::Commit() {
     }
 
 abort:
-    txid_sts->set_status_code(TxStatus_Code_Aborting);
+    areq.set_allocated_txid(new TxIdentifier(*_txid));
+    stub.AbortTx(&cntl, &areq, &aresp, nullptr);
+    if (cntl.Failed()) {
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
+    }
+
+    LOG_SDK(cntl, areq, aresp, AbortTx_from_txplanner)
+
+    _txid.reset(aresp.release_txid());
+    txid_sts = _txid->release_status();
+    _txid->set_allocated_status(txid_sts);
+    if (_txid->status().status_code() != TxStatus_Code_Aborting) {
+        ss << " Wrong tx status code: " << _txid->status().status_code();
+        return Status::NotSupportedErr(ss.str());
+    }
+
     Status abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
         txid_sts->set_status_code(TxStatus_Code_Aborted);

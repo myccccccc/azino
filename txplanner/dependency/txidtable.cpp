@@ -89,18 +89,17 @@ PointSet TxIDTable::List() {
     return res;
 }
 
-void TxIDTable::UpsertTxID(const TxIdentifier& txid, TimeStamp start_ts,
-                           TimeStamp commit_ts) {
+void TxIDTable::UpsertTxID(const TxIdentifier& txid) {
     std::lock_guard<bthread::Mutex> lck(_m);
 
-    if (_table.find(start_ts) == _table.end()) {
-        _table[start_ts].reset(new TxID());
+    if (_table.find(txid.start_ts()) == _table.end()) {
+        _table[txid.start_ts()].reset(new TxID());
     }
 
-    _table[start_ts]->reset_txid(txid);
+    _table[txid.start_ts()]->reset_txid(txid);
 
-    if (commit_ts != MIN_TIMESTAMP) {
-        _table[commit_ts] = _table[start_ts];
+    if (txid.has_commit_ts()) {
+        _table[txid.commit_ts()] = _table[txid.start_ts()];
     }
 }
 
@@ -171,7 +170,9 @@ int TxIDTable::DeleteTxID(const TxIdentifier& txid) {
     }
 
     _table.erase(txid.start_ts());
-    _table.erase(txid.commit_ts());
+    if (txid.has_commit_ts()) {
+        _table.erase(txid.commit_ts());
+    }
     return 0;
 }
 }  // namespace txplanner

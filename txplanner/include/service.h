@@ -27,6 +27,11 @@ class TxServiceImpl : public TxService {
                           ::azino::txplanner::CommitTxResponse* response,
                           ::google::protobuf::Closure* done) override;
 
+    virtual void AbortTx(::google::protobuf::RpcController* controller,
+                         const ::azino::txplanner::AbortTxRequest* request,
+                         ::azino::txplanner::AbortTxResponse* response,
+                         ::google::protobuf::Closure* done) override;
+
    private:
     std::unique_ptr<AscendingTimer> _timer;
     TxIDTable* _tt;

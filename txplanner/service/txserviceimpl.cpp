@@ -53,7 +53,7 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to begin.";
 
-    _tt->UpsertTxID(*txid, txid->start_ts());
+    _tt->UpsertTxID(*txid);
 }
 
 void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
@@ -82,7 +82,34 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to commit.";
 
-    _tt->UpsertTxID(*txid, txid->start_ts(), txid->commit_ts());
+    _tt->UpsertTxID(*txid);
+}
+
+void TxServiceImpl::AbortTx(::google::protobuf::RpcController *controller,
+                            const ::azino::txplanner::AbortTxRequest *request,
+                            ::azino::txplanner::AbortTxResponse *response,
+                            ::google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
+
+    if (request->txid().status().status_code() != TxStatus_Code_Preputting) {
+        LOG(WARNING) << cntl->remote_side()
+                     << " tx: " << request->txid().ShortDebugString()
+                     << " are not supposed to abort.";
+    }
+
+    std::stringstream ss;
+    auto txstatus = new TxStatus();
+    txstatus->set_status_code(TxStatus_Code_Aborting);
+    auto txid = new TxIdentifier();
+    txid->set_start_ts(request->txid().start_ts());
+    txid->set_allocated_status(txstatus);
+    response->set_allocated_txid(txid);
+
+    LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
+              << " is going to abort.";
+
+    _tt->DeleteTxID(*txid);
 }
 }  // namespace txplanner
 }  // namespace azino

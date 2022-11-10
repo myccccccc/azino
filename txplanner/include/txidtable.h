@@ -27,8 +27,7 @@ class TxIDTable : public DependenceGraph {
 
     virtual PointSet List() override;
 
-    void UpsertTxID(const TxIdentifier& txid, TimeStamp start_ts,
-                    TimeStamp commit_ts = MIN_TIMESTAMP);
+    void UpsertTxID(const TxIdentifier& txid);
 
     int DeleteTxID(const TxIdentifier& txid);
 

@@ -35,9 +35,9 @@ TEST_F(DependencyTest, graph_basic) {
     TxIdentifier tx_5_6;
     tx_5_6.set_start_ts(5);
     tx_5_6.set_commit_ts(6);
-    table->UpsertTxID(tx_1_3, tx_1_3.start_ts(), tx_1_3.commit_ts());
-    table->UpsertTxID(tx_2_4, tx_2_4.start_ts(), tx_2_4.commit_ts());
-    table->UpsertTxID(tx_5_6, tx_5_6.start_ts(), tx_5_6.commit_ts());
+    table->UpsertTxID(tx_1_3);
+    table->UpsertTxID(tx_2_4);
+    table->UpsertTxID(tx_5_6);
     ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 1, 2));
     ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 2, 5));
     ASSERT_EQ(0, table->AddDep(azino::txplanner::WRITEREAD, 5, 1));

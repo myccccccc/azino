@@ -23,9 +23,18 @@ message CommitTxResponse {
   optional azino.TxIdentifier txid = 1;
 }
 
+message AbortTxRequest {
+  optional azino.TxIdentifier txid = 1;
+}
+
+message AbortTxResponse {
+  optional azino.TxIdentifier txid = 1;
+}
+
 service TxService {
   rpc BeginTx(BeginTxRequest) returns (BeginTxResponse);
   rpc CommitTx(CommitTxRequest) returns (CommitTxResponse);
+  rpc AbortTx(AbortTxRequest) returns (AbortTxResponse);
 }
 
 message DepRequest {
