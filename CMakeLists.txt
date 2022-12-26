@@ -1,33 +1,46 @@
 cmake_minimum_required(VERSION 3.5)
 project(azino C CXX)
 
-option(LINK_SO "Whether brpc are linked dynamically" OFF)
-
-include(FindThreads)
-include(FindProtobuf)
+# project include
 include_directories(${PROJECT_SOURCE_DIR}/include)
+
+# protobuf
+set (Protobuf_USE_STATIC_LIBS ON)
+include(FindProtobuf)
+if (Protobuf_FOUND)
+    message( STATUS "Protobuf version : ${Protobuf_VERSION}" )
+    message( STATUS "Protobuf include path : ${Protobuf_INCLUDE_DIRS}" )
+    message( STATUS "Protobuf libraries : ${Protobuf_LIBRARIES}" )
+endif()
+
+# zlib
+find_path(ZLIB_INCLUDE_PATH NAMES zlib.h)
+find_library(ZLIB_LIB NAMES libz.a)
+if ((NOT ZLIB_INCLUDE_PATH) OR (NOT ZLIB_LIB))
+    message(FATAL_ERROR "Fail to find zlib")
+endif()
+message( STATUS "zlib libraries : ${ZLIB_LIB}" )
+include_directories(${ZLIB_INCLUDE_PATH})
 
 # brpc
 set(BRPC_PATH "${PROJECT_SOURCE_DIR}/third_party/incubator-brpc/output")
 message(STATUS "Set brpc path ${BRPC_PATH}")
 set(CMAKE_PREFIX_PATH ${BRPC_PATH})
 find_path(BRPC_INCLUDE_PATH NAMES brpc/server.h)
-if(LINK_SO)
-    find_library(BRPC_LIB NAMES brpc)
-else()
-    find_library(BRPC_LIB NAMES libbrpc.a brpc)
-endif()
+find_library(BRPC_LIB NAMES libbrpc.a)
 if((NOT BRPC_INCLUDE_PATH) OR (NOT BRPC_LIB))
     message(FATAL_ERROR "Fail to find brpc")
 endif()
+message( STATUS "brpc libraries : ${BRPC_LIB}" )
 include_directories(${BRPC_INCLUDE_PATH})
 
 # gflag
 find_path(GFLAGS_INCLUDE_PATH gflags/gflags.h)
-find_library(GFLAGS_LIBRARY NAMES gflags libgflags)
+find_library(GFLAGS_LIBRARY NAMES libgflags.a)
 if((NOT GFLAGS_INCLUDE_PATH) OR (NOT GFLAGS_LIBRARY))
     message(FATAL_ERROR "Fail to find gflags")
 endif()
+message( STATUS "gflag libraries : ${GFLAGS_LIBRARY}" )
 include_directories(${GFLAGS_INCLUDE_PATH})
 execute_process(
         COMMAND bash -c "grep \"namespace [_A-Za-z0-9]\\+ {\" ${GFLAGS_INCLUDE_PATH}/gflags/gflags_declare.h | head -1 | awk '{print $2}' | tr -d '\n'"
@@ -41,31 +54,46 @@ if(${GFLAGS_NS} STREQUAL "GFLAGS_NAMESPACE")
 endif()
 message(STATUS "gflags namespace ${GFLAGS_NS}")
 
+# snappy
+find_path(SNAPPY_INCLUDE_PATH NAMES snappy.h)
+find_library(SNAPPY_LIB NAMES libsnappy.a)
+if ((NOT SNAPPY_INCLUDE_PATH) OR (NOT SNAPPY_LIB))
+    message(FATAL_ERROR "Fail to find snappy")
+endif()
+message( STATUS "snappy libraries : ${SNAPPY_LIB}" )
+include_directories(${SNAPPY_INCLUDE_PATH})
+
 # leveldb
 find_path(LEVELDB_INCLUDE_PATH NAMES leveldb/db.h)
-find_library(LEVELDB_LIB NAMES leveldb)
+find_library(LEVELDB_LIB NAMES libleveldb.a)
 if ((NOT LEVELDB_INCLUDE_PATH) OR (NOT LEVELDB_LIB))
     message(FATAL_ERROR "Fail to find leveldb")
 endif()
+message( STATUS "leveldb libraries : ${LEVELDB_LIB}" )
 include_directories(${LEVELDB_INCLUDE_PATH})
 
 # openssl
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL)
 include_directories(${OPENSSL_INCLUDE_DIR})
+message( STATUS "openssl crypto libraries : ${OPENSSL_CRYPTO_LIBRARY}" )
+message( STATUS "openssl ssl libraries : ${OPENSSL_SSL_LIBRARY}" )
 
 # compiler options
 set(CMAKE_CPP_FLAGS "${DEFINE_CLOCK_GETTIME} -DGFLAGS_NS=${GFLAGS_NS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CPP_FLAGS} -g -O0 -D__const__= -pipe -W -Wall -Wno-unused-parameter -fPIC -fno-omit-frame-pointer -faligned-new")
+set(CMAKE_CXX_FLAGS "${CMAKE_CPP_FLAGS} -g -O0 -D__const__= -pipe -W -Wall -Wno-unused-parameter -fPIC -fno-omit-frame-pointer -faligned-new -static-libgcc -static-libstdc++")
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(DYNAMIC_LIB
-        ${CMAKE_THREAD_LIBS_INIT}
+set(COMMON_LIB
+        pthread
         ${GFLAGS_LIBRARY}
         ${PROTOBUF_LIBRARIES}
+        ${ZLIB_LIB}
         ${LEVELDB_LIB}
-        ${OPENSSL_CRYPTO_LIBRARY}
+        ${SNAPPY_LIB}
         ${OPENSSL_SSL_LIBRARY}
+        ${OPENSSL_CRYPTO_LIBRARY}
         dl
         )
 

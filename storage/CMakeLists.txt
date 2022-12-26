@@ -14,7 +14,7 @@ target_link_libraries(storage_server
                         azino_storage::lib
                         azino::lib
                         ${BRPC_LIB}
-                        ${DYNAMIC_LIB})
+                        ${COMMON_LIB})
 
 # build tests
 enable_testing()
@@ -26,8 +26,7 @@ target_link_libraries(test_dbimpl
                         azino::lib
                         gtest_main
                         ${BRPC_LIB}
-                        ${DYNAMIC_LIB}
-                        ${PROTOBUF_LIBRARIES})
+                        ${COMMON_LIB})
 
 include(GoogleTest)
 gtest_discover_tests(test_dbimpl)

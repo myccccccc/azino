@@ -13,4 +13,4 @@ target_link_libraries(txplanner_server
         azino_txplanner::lib
         azino::lib
         ${BRPC_LIB}
-        ${DYNAMIC_LIB})
+        ${COMMON_LIB})
