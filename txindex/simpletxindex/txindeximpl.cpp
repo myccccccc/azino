@@ -40,22 +40,13 @@ extern "C" void* CallbackWrapper(void* arg) {
         }                                                                 \
     } while (0);
 
-#define CHECK_WRITE_WRITE_DEP(mv, txid, deps)                         \
-    do {                                                              \
-        auto ltv = mv.LargestTSValue();                               \
-        if (ltv.first != MIN_TIMESTAMP) {                             \
-            deps.push_back(txindex::Dep{txindex::DepType::WRITEWRITE, \
-                                        ltv.first, txid.start_ts()}); \
-        }                                                             \
-    } while (0);
-
-#define CHECK_READ_WRITE_DEP(mv, txid, deps)                            \
-    do {                                                                \
-        for (auto iter = mv._readers_since_last_write.begin();          \
-             iter != mv._readers_since_last_write.end(); iter++) {      \
-            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,    \
-                                        iter->first, txid.start_ts()}); \
-        }                                                               \
+#define CHECK_READ_WRITE_DEP(mv, txid, deps)                             \
+    do {                                                                 \
+        for (auto iter = mv._readers.begin(); iter != mv._readers.end(); \
+             iter++) {                                                   \
+            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,     \
+                                        iter->first, txid.start_ts()});  \
+        }                                                                \
     } while (0);
 
 namespace azino {
@@ -108,10 +99,10 @@ class MVCCValue {
     }
 
     void AddReader(const TxIdentifier& txid) {
-        _readers_since_last_write[txid.start_ts()] = txid;
+        _readers[txid.start_ts()] = txid;
     }
 
-    void ClearReaders() { _readers_since_last_write.clear(); }
+    void ClearReaders() { _readers.clear(); }
 
    private:
     friend class KVBucket;
@@ -120,7 +111,7 @@ class MVCCValue {
     TxIdentifier _holder;
     txindex::ValuePtr _intent_value;
     txindex::MultiVersionValue _t2v;
-    std::unordered_map<TimeStamp, TxIdentifier> _readers_since_last_write;
+    std::unordered_map<TimeStamp, TxIdentifier> _readers;
 };
 
 class KVBucket : public txindex::TxIndex {
@@ -169,7 +160,6 @@ class KVBucket : public txindex::TxIndex {
             return sts;
         }
 
-        CHECK_WRITE_WRITE_DEP(mv, txid, deps)
         CHECK_READ_WRITE_DEP(mv, txid, deps)
 
         mv._has_lock = true;
@@ -223,7 +213,6 @@ class KVBucket : public txindex::TxIndex {
             }
         }
 
-        CHECK_WRITE_WRITE_DEP(mv, txid, deps)
         CHECK_READ_WRITE_DEP(mv, txid, deps)
 
         mv._has_lock = false;
@@ -399,26 +388,19 @@ class KVBucket : public txindex::TxIndex {
                                         mv.Holder().start_ts()});
         }
 
+        // committed RW dep
         auto rsv = mv.ReverseSeek(txid.start_ts());
-        if (rsv.first > txid.start_ts()) {
-            // committed RW dep
-            // todo: 是应该找到所有 ts 比 read_ts 大的吗，还是只用找一个。。
-            // 现在是只找了一个
+        while (rsv.second) {
             deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
                                         txid.start_ts(), rsv.first});
+            rsv = mv.ReverseSeek(rsv.first);
         }
 
+        // add reader
+        mv.AddReader(txid);
+
         auto sv = mv.Seek(txid.start_ts());
-        if (sv.first <= txid.start_ts()) {
-            // WR dep
-            deps.push_back(txindex::Dep{txindex::DepType::WRITEREAD, sv.first,
-                                        txid.start_ts()});
-
-            // add reader if it reads the newest committed value
-            if (sv.first == mv.LargestTSValue().first) {
-                mv.AddReader(txid);
-            }
-
+        if (sv.second) {
             ss << "Tx(" << txid.ShortDebugString() << ") read on "
                << "key: " << key << " success. "
                << "Find "
@@ -428,11 +410,6 @@ class KVBucket : public txindex::TxIndex {
             sts.set_error_message(ss.str());
             v.CopyFrom(*(sv.second));
             return sts;
-        }
-
-        if (mv._t2v.empty()) {
-            // no committed value yet, add a reader
-            mv.AddReader(txid);
         }
 
         ss << "Tx(" << txid.ShortDebugString() << ") read on "

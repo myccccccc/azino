@@ -456,24 +456,23 @@ TEST_F(TxIndexImplTest, read_dep_report) {
                       std::bind(&TxIndexImplTest::dummyCallback, this), deps)
             .error_code());
 
-    azino::TxIdentifier read_tx_4;
-    read_tx_4.set_start_ts(4);
+    azino::TxIdentifier read_tx_2;
+    read_tx_2.set_start_ts(2);
     azino::Value read_value;
     deps.clear();
-    ASSERT_EQ(ti->Read(k1, read_value, read_tx_4, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(v1.content(), read_value.content());
+    ASSERT_EQ(ti->Read(k1, read_value, read_tx_2, NULL, deps).error_code(),
+              azino::TxOpStatus_Code_ReadNotExist);
 
     ASSERT_EQ(3, deps.size());
-    ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[0].ts1);
     ASSERT_EQ(write_tx_7.start_ts(), deps[0].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
-    ASSERT_EQ(read_tx_4.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.commit_ts(), deps[1].ts2);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[1].ts1);
+    ASSERT_EQ(t1.commit_ts(), deps[1].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
-    ASSERT_EQ(t1.commit_ts(), deps[2].ts1);
-    ASSERT_EQ(read_tx_4.start_ts(), deps[2].ts2);
-    ASSERT_EQ(azino::txindex::DepType::WRITEREAD, deps[2].type);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[2].ts1);
+    ASSERT_EQ(t2.commit_ts(), deps[2].ts2);
+    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[2].type);
 }
 
 TEST_F(TxIndexImplTest, write_dep_report) {
@@ -506,37 +505,17 @@ TEST_F(TxIndexImplTest, write_dep_report) {
                       deps)
             .error_code());
 
-    ASSERT_EQ(2, deps.size());
-    ASSERT_EQ(t1.commit_ts(), deps[0].ts1);
+    ASSERT_EQ(1, deps.size());
+    ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
     ASSERT_EQ(t2.start_ts(), deps[0].ts2);
-    ASSERT_EQ(azino::txindex::DepType::WRITEWRITE, deps[0].type);
-    ASSERT_EQ(read_tx_4.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
-    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
+    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
 
     deps.clear();
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v2, t2, deps).error_code());
 
-    ASSERT_EQ(2, deps.size());
-    ASSERT_EQ(t1.commit_ts(), deps[0].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[0].ts2);
-    ASSERT_EQ(azino::txindex::DepType::WRITEWRITE, deps[0].type);
-    ASSERT_EQ(read_tx_4.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
-    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
-
-    t2.set_commit_ts(6);
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
-
-    azino::TxIdentifier write_tx_7;
-    write_tx_7.set_start_ts(7);
-    deps.clear();
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, write_tx_7, deps).error_code());
-
     ASSERT_EQ(1, deps.size());
-    ASSERT_EQ(t2.commit_ts(), deps[0].ts1);
-    ASSERT_EQ(write_tx_7.start_ts(), deps[0].ts2);
-    ASSERT_EQ(azino::txindex::DepType::WRITEWRITE, deps[0].type);
+    ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
+    ASSERT_EQ(t2.start_ts(), deps[0].ts2);
+    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
 }
