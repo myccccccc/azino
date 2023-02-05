@@ -4,21 +4,15 @@
 #include "reporter.h"
 #include "service.h"
 
-#define DO_DEP_REPORT(key, deps)                                              \
-    do {                                                                      \
-        for (size_t i = 0; i < deps.size(); i++) {                            \
-            switch (deps[i].type) {                                           \
-                case DepType::READWRITE:                                      \
-                    _deprpt->ReadWriteReport(key, deps[i].ts1, deps[i].ts2);  \
-                    break;                                                    \
-                case DepType::WRITEREAD:                                      \
-                    _deprpt->WriteReadReport(key, deps[i].ts1, deps[i].ts2);  \
-                    break;                                                    \
-                case DepType::WRITEWRITE:                                     \
-                    _deprpt->WriteWriteReport(key, deps[i].ts1, deps[i].ts2); \
-                    break;                                                    \
-            }                                                                 \
-        }                                                                     \
+#define DO_DEP_REPORT(key, deps)                                             \
+    do {                                                                     \
+        for (size_t i = 0; i < deps.size(); i++) {                           \
+            switch (deps[i].type) {                                          \
+                case DepType::READWRITE:                                     \
+                    _deprpt->ReadWriteReport(key, deps[i].ts1, deps[i].ts2); \
+                    break;                                                   \
+            }                                                                \
+        }                                                                    \
     } while (0);
 
 namespace azino {

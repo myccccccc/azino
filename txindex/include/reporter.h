@@ -10,7 +10,7 @@
 
 namespace azino {
 namespace txindex {
-enum DepType { READWRITE = 1, WRITEWRITE = 2, WRITEREAD = 3 };
+enum DepType { READWRITE = 1 };
 
 typedef struct Dep {
     DepType type;
@@ -25,10 +25,6 @@ class DepReporter {
     ~DepReporter() = default;
 
     void ReadWriteReport(const std::string key, uint64_t ts1, uint64_t ts2);
-
-    void WriteWriteReport(const std::string key, uint64_t ts1, uint64_t ts2);
-
-    void WriteReadReport(const std::string key, uint64_t ts1, uint64_t ts2);
 
    private:
     std::unique_ptr<txplanner::DependenceService_Stub> _stub;

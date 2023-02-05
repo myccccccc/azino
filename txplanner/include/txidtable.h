@@ -8,38 +8,34 @@
 #include <unordered_set>
 
 #include "azino/kv.h"
-#include "point.h"
+#include "dependency.h"
 #include "service/tx.pb.h"
+#include "txid.h"
 
 namespace azino {
 namespace txplanner {
-class TxID;
-typedef std::shared_ptr<TxID> TxIDPtr;
 
-class TxIDTable : public DependenceGraph {
+class TxIDTable {
    public:
     TxIDTable() = default;
-    virtual ~TxIDTable() = default;
+    ~TxIDTable() = default;
 
-    virtual DependenceSet GetInDependence(uint64_t id) override;
+    TxIDPtrSet GetInDependence(uint64_t id);
 
-    virtual DependenceSet GetOutDependence(uint64_t id) override;
+    TxIDPtrSet GetOutDependence(uint64_t id);
 
-    virtual PointSet List() override;
+    TxIDPtrSet List();
 
     void UpsertTxID(const TxIdentifier& txid);
 
     int DeleteTxID(const TxIdentifier& txid);
 
     int AddDep(DepType type, TimeStamp ts1, TimeStamp ts2);
-    int DelDep(const DependencePtr& dp);
 
    private:
     bthread::Mutex _m;
-    std::unordered_map<TimeStamp, TxIDPtr>
-        _table;  // ts can be start_ts or commit_ts, their value must point at
-                 // the same TxID
-    int _del_dep_locked(const DependencePtr& dp);
+    TxIDPtrMap _table;  // ts can be start_ts or commit_ts, their value must
+                        // point at the same TxID
 };
 
 }  // namespace txplanner

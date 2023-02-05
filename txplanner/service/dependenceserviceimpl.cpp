@@ -26,36 +26,6 @@ void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
               << " key:" << request->key() << " ts1:" << request->tx1_ts()
               << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
 }
-void DependenceServiceImpl::WWDep(::google::protobuf::RpcController* controller,
-                                  const ::azino::txplanner::DepRequest* request,
-                                  ::azino::txplanner::DepResponse* response,
-                                  ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    int error_code =
-        _tt->AddDep(DepType::WRITEWRITE, request->tx1_ts(), request->tx2_ts());
-
-    LOG(INFO) << cntl->remote_side() << " Dep report type:"
-              << "writewrite"
-              << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
-}
-void DependenceServiceImpl::WRDep(::google::protobuf::RpcController* controller,
-                                  const ::azino::txplanner::DepRequest* request,
-                                  ::azino::txplanner::DepResponse* response,
-                                  ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    int error_code =
-        _tt->AddDep(DepType::WRITEREAD, request->tx1_ts(), request->tx2_ts());
-
-    LOG(INFO) << cntl->remote_side() << " Dep report type:"
-              << "writeread"
-              << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
-}
 
 }  // namespace txplanner
 }  // namespace azino

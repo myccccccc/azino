@@ -49,14 +49,6 @@ class DependenceServiceImpl : public DependenceService {
                        const ::azino::txplanner::DepRequest* request,
                        ::azino::txplanner::DepResponse* response,
                        ::google::protobuf::Closure* done) override;
-    virtual void WWDep(::google::protobuf::RpcController* controller,
-                       const ::azino::txplanner::DepRequest* request,
-                       ::azino::txplanner::DepResponse* response,
-                       ::google::protobuf::Closure* done) override;
-    virtual void WRDep(::google::protobuf::RpcController* controller,
-                       const ::azino::txplanner::DepRequest* request,
-                       ::azino::txplanner::DepResponse* response,
-                       ::google::protobuf::Closure* done) override;
 
    private:
     TxIDTable* _tt;

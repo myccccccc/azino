@@ -49,6 +49,4 @@ message DepResponse {
 
 service DependenceService {
   rpc RWDep(DepRequest) returns (DepResponse);
-  rpc WWDep(DepRequest) returns (DepResponse);
-  rpc WRDep(DepRequest) returns (DepResponse);
 }
