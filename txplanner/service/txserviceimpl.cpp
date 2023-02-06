@@ -38,13 +38,11 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    auto txstatus = new TxStatus();
-    txstatus->set_status_code(TxStatus_Code_Started);
     auto start_ts = _timer->NewTime();
-    auto txid = new TxIdentifier();
-    txid->set_start_ts(start_ts);
-    txid->set_allocated_status(txstatus);
+    auto txidptr = _tt->BeginTx(start_ts);
+    auto txid = new TxIdentifier(txidptr->txid);
     response->set_allocated_txid(txid);
+
     for (std::string &addr : _txindex_addrs) {
         response->add_txindex_addrs(addr);
     }
@@ -52,8 +50,6 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to begin.";
-
-    _tt->UpsertTxID(*txid);
 }
 
 void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
@@ -63,26 +59,29 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    if (request->txid().status().status_code() != TxStatus_Code_Preputting) {
+    if (request->txid().status().status_code() != TxStatus_Code_Preput) {
         LOG(WARNING) << cntl->remote_side()
                      << " tx: " << request->txid().ShortDebugString()
                      << " are not supposed to commit.";
     }
 
-    std::stringstream ss;
-    auto txstatus = new TxStatus();
-    txstatus->set_status_code(TxStatus_Code_Committing);
     auto commit_ts = _timer->NewTime();
-    auto txid = new TxIdentifier();
-    txid->set_start_ts(request->txid().start_ts());
-    txid->set_commit_ts(commit_ts);
-    txid->set_allocated_status(txstatus);
+    auto txidptr = _tt->CommitTx(request->txid(), commit_ts);
+    auto txid = new TxIdentifier(txidptr->txid);
     response->set_allocated_txid(txid);
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to commit.";
+    done_guard.release()->Run();
 
-    _tt->UpsertTxID(*txid);
+    if (txidptr->txid.status().status_code() == TxStatus_Code_Commit) {
+        auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(txidptr->id());
+        for (auto p : abort_set) {
+            LOG(INFO) << " tx: " << p->txid.ShortDebugString()
+                      << " will be abort.";
+            _tt->AbortTx(p->txid);
+        }
+    }
 }
 
 void TxServiceImpl::AbortTx(::google::protobuf::RpcController *controller,
@@ -92,24 +91,30 @@ void TxServiceImpl::AbortTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    if (request->txid().status().status_code() != TxStatus_Code_Preputting) {
+    if (request->txid().status().status_code() != TxStatus_Code_Preput) {
         LOG(WARNING) << cntl->remote_side()
                      << " tx: " << request->txid().ShortDebugString()
                      << " are not supposed to abort.";
     }
 
-    std::stringstream ss;
-    auto txstatus = new TxStatus();
-    txstatus->set_status_code(TxStatus_Code_Aborting);
-    auto txid = new TxIdentifier();
-    txid->set_start_ts(request->txid().start_ts());
-    txid->set_allocated_status(txstatus);
+    auto txidptr = _tt->AbortTx(request->txid());
+    auto txid = new TxIdentifier(txidptr->txid);
     response->set_allocated_txid(txid);
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to abort.";
+}
 
-    _tt->DeleteTxID(*txid);
+void TxServiceImpl::ValidateTx(
+    ::google::protobuf::RpcController *controller,
+    const ::azino::txplanner::ValidateTxRequest *request,
+    ::azino::txplanner::ValidateTxResponse *response,
+    ::google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    if (request->is_early_validation()) {
+        _tt->EarlyValidateTxID(request->txid(), response, done_guard.release());
+        return;
+    }
 }
 }  // namespace txplanner
 }  // namespace azino

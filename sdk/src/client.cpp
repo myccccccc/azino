@@ -27,7 +27,7 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
     LOG(INFO) << " Sdk: " << cntl.local_side() << " " << #msg << ": "         \
               << cntl.remote_side() << " request: " << req.ShortDebugString() \
               << " response: " << resp.ShortDebugString()                     \
-              << " latency= " << cntl.latency_us() << "us";
+              << " latency= " << cntl.latency_us() << "us" << std::endl;
 
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
@@ -71,7 +71,7 @@ Status Transaction::Begin() {
     LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::NotSupportedErr(ss.str());
     }
@@ -120,15 +120,15 @@ Status Transaction::Commit() {
         ss << " Transaction has not began. ";
         return Status::IllegalTxOp(ss.str());
     }
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Transaction is not allowed to commit. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
 
     auto txid_sts = _txid->release_status();
+    txid_sts->set_status_code(TxStatus_Code_Preput);
     _txid->set_allocated_status(txid_sts);
-    txid_sts->set_status_code(TxStatus_Code_Preputting);
 
     preput_sts = PreputAll();
     if (!preput_sts.IsOk()) {
@@ -147,14 +147,13 @@ Status Transaction::Commit() {
     _txid.reset(resp.release_txid());
     txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
-    if (_txid->status().status_code() != TxStatus_Code_Committing) {
+    if (_txid->status().status_code() != TxStatus_Code_Commit) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
-        return Status::NotSupportedErr(ss.str());
+        goto abort;
     }
 
     commit_sts = CommitAll();
     if (commit_sts.IsOk()) {
-        txid_sts->set_status_code(TxStatus_Code_Committed);
         txid_sts->set_status_message(commit_sts.ToString());
         return commit_sts;
     } else {
@@ -164,26 +163,28 @@ Status Transaction::Commit() {
     }
 
 abort:
-    areq.set_allocated_txid(new TxIdentifier(*_txid));
-    stub.AbortTx(&cntl, &areq, &aresp, nullptr);
-    if (cntl.Failed()) {
-        LOG_CONTROLLER_ERROR(cntl, ss)
-        return Status::NetworkErr(ss.str());
+    if (_txid->status().status_code() != TxStatus_Code_Abort) {
+        areq.set_allocated_txid(new TxIdentifier(*_txid));
+        stub.AbortTx(&cntl, &areq, &aresp, nullptr);
+        if (cntl.Failed()) {
+            LOG_CONTROLLER_ERROR(cntl, ss)
+            return Status::NetworkErr(ss.str());
+        }
+
+        LOG_SDK(cntl, areq, aresp, AbortTx_from_txplanner)
+
+        _txid.reset(aresp.release_txid());
     }
 
-    LOG_SDK(cntl, areq, aresp, AbortTx_from_txplanner)
-
-    _txid.reset(aresp.release_txid());
     txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
-    if (_txid->status().status_code() != TxStatus_Code_Aborting) {
+    if (_txid->status().status_code() != TxStatus_Code_Abort) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::NotSupportedErr(ss.str());
     }
 
     Status abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
-        txid_sts->set_status_code(TxStatus_Code_Aborted);
         txid_sts->set_status_message(preput_sts.ToString());
         return preput_sts;
     } else {
@@ -339,7 +340,7 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
         ss << " Transaction has not began.";
         return Status::IllegalTxOp(ss.str());
     }
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Transaction is not allowed to put. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());

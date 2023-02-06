@@ -25,6 +25,22 @@ void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
               << "readwrite"
               << " key:" << request->key() << " ts1:" << request->tx1_ts()
               << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
+
+    auto tx1_ts = request->tx1_ts();
+    auto tx2_ts = request->tx2_ts();
+
+    done_guard.release()->Run();
+
+    auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(tx1_ts);
+    for (auto p : abort_set) {
+        LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
+        _tt->AbortTx(p->txid);
+    }
+    abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(tx2_ts);
+    for (auto p : abort_set) {
+        LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
+        _tt->AbortTx(p->txid);
+    }
 }
 
 }  // namespace txplanner

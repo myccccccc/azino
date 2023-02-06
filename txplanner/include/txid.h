@@ -9,10 +9,10 @@
 
 #include "azino/kv.h"
 #include "service/tx.pb.h"
+#include "service/txplanner/txplanner.pb.h"
 
 namespace azino {
 namespace txplanner {
-class TxIDTable;
 class TxID;
 
 typedef std::shared_ptr<TxID> TxIDPtr;
@@ -34,15 +34,18 @@ class TxID {
    public:
     TxID() = default;
     ~TxID() = default;
-    inline void reset_txid(const TxIdentifier& new_txid) { txid = new_txid; }
 
-    inline uint64_t ID() const { return txid.start_ts(); }
+    inline uint64_t id() const { return txid.start_ts(); }
 
-   private:
+    void early_validate();
+
+    void del_dep(TxIDPtr self);
+
     TxIdentifier txid;
     TxIDPtrSet in;
     TxIDPtrSet out;
-    friend class TxIDTable;
+    ::azino::txplanner::ValidateTxResponse* early_validation_response = nullptr;
+    ::google::protobuf::Closure* early_validation_done = nullptr;
 };
 
 }  // namespace txplanner

@@ -10,6 +10,7 @@
 #include "azino/kv.h"
 #include "dependency.h"
 #include "service/tx.pb.h"
+#include "service/txplanner/txplanner.pb.h"
 #include "txid.h"
 
 namespace azino {
@@ -20,19 +21,22 @@ class TxIDTable {
     TxIDTable() = default;
     ~TxIDTable() = default;
 
-    TxIDPtrSet GetInDependence(uint64_t id);
-
-    TxIDPtrSet GetOutDependence(uint64_t id);
-
     TxIDPtrSet List();
-
-    void UpsertTxID(const TxIdentifier& txid);
-
-    int DeleteTxID(const TxIdentifier& txid);
 
     int AddDep(DepType type, TimeStamp ts1, TimeStamp ts2);
 
+    int EarlyValidateTxID(const TxIdentifier& txid,
+                          ::azino::txplanner::ValidateTxResponse* response,
+                          ::google::protobuf::Closure* done);
+
+    TxIDPtrSet FindAbortTxnOnConsecutiveRWDep(TimeStamp ts);
+
+    TxIDPtr BeginTx(TimeStamp start_ts);
+    TxIDPtr CommitTx(const TxIdentifier& txid, TimeStamp commit_ts);
+    TxIDPtr AbortTx(const TxIdentifier& txid);
+
    private:
+    void _update_txid(TxIDPtr p, const TxIdentifier& txid);
     bthread::Mutex _m;
     TxIDPtrMap _table;  // ts can be start_ts or commit_ts, their value must
                         // point at the same TxID

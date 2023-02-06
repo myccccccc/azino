@@ -31,10 +31,20 @@ message AbortTxResponse {
   optional azino.TxIdentifier txid = 1;
 }
 
+message ValidateTxRequest {
+  optional azino.TxIdentifier txid = 1;
+  optional bool is_early_validation = 2;
+}
+
+message ValidateTxResponse {
+  optional azino.TxIdentifier txid = 1;
+}
+
 service TxService {
   rpc BeginTx(BeginTxRequest) returns (BeginTxResponse);
   rpc CommitTx(CommitTxRequest) returns (CommitTxResponse);
   rpc AbortTx(AbortTxRequest) returns (AbortTxResponse);
+  rpc ValidateTx(ValidateTxRequest) returns (ValidateTxResponse);
 }
 
 message DepRequest {
