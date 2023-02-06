@@ -14,7 +14,7 @@
 
 namespace azino {
 namespace txindex {
-
+class TxIndex;
 class Persistor {
    public:
     Persistor(TxIndex *index, const std::string &storage_addr);
