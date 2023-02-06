@@ -73,15 +73,15 @@ Status Transaction::Begin() {
     _txid.reset(resp.release_txid());
     if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
     if (!resp.has_storage_addr()) {
         ss << " Missing storage addr";
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
     if (resp.txindex_addrs_size() == 0) {
         ss << " Missing txindex addrs";
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
 
     auto* channel = new brpc::Channel();
@@ -110,6 +110,7 @@ Status Transaction::Commit() {
     std::stringstream ss;
     Status preput_sts = Status::Ok();
     Status commit_sts = Status::Ok();
+    Status abort_sts = Status::Ok();
     azino::txplanner::TxService_Stub stub(_txplanner.get());
     brpc::Controller cntl;
     azino::txplanner::CommitTxRequest req;
@@ -148,7 +149,9 @@ Status Transaction::Commit() {
     txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
     if (_txid->status().status_code() != TxStatus_Code_Commit) {
-        ss << " Wrong tx status code: " << _txid->status().status_code();
+        ss << " Wrong tx status code when commit: "
+           << _txid->status().status_code();
+        preput_sts = Status::TxPlannerErr(ss.str());
         goto abort;
     }
 
@@ -179,11 +182,11 @@ abort:
     txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
     if (_txid->status().status_code() != TxStatus_Code_Abort) {
-        ss << " Wrong tx status code: " << _txid->status().status_code();
-        return Status::NotSupportedErr(ss.str());
+        ss << " Wrong tx status code when abort: "
+           << _txid->status().status_code();
+        return Status::TxPlannerErr(ss.str());
     }
 
-    Status abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
         txid_sts->set_status_message(preput_sts.ToString());
         return preput_sts;
