@@ -187,6 +187,7 @@ abort:
         return Status::TxPlannerErr(ss.str());
     }
 
+    abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
         txid_sts->set_status_message(preput_sts.ToString());
         return preput_sts;
