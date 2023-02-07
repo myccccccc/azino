@@ -21,6 +21,7 @@ struct DataToPersist;
 typedef std::shared_ptr<Value> ValuePtr;
 typedef std::map<TimeStamp, ValuePtr, std::greater<TimeStamp>>
     MultiVersionValue;
+typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
 
 class TxIndex {
    public:
@@ -86,6 +87,11 @@ class MVCCValue {
     inline bool HasIntent() const { return _has_intent; }
     inline TxIdentifier Holder() const { return _holder; }
     inline txindex::ValuePtr IntentValue() const { return _intent_value; }
+    inline size_t Size() const { return _t2v.size(); }
+    void Lock(const TxIdentifier& txid);
+    void Prewrite(const Value& v, const TxIdentifier& txid);
+    void Clean();
+    void Commit(const TxIdentifier& txid);
 
     std::pair<TimeStamp, txindex::ValuePtr> LargestTSValue() const;
 
@@ -100,18 +106,19 @@ class MVCCValue {
     unsigned Truncate(TimeStamp ts);
 
     inline void AddReader(const TxIdentifier& txid) {
-        _readers[txid.start_ts()] = txid;
+        _readers.insert(std::make_pair(txid.start_ts(), txid));
     }
-    inline void ClearReaders() { _readers.clear(); }
+    inline ReaderMap& Readers() { return _readers; }
+
+    inline MultiVersionValue& MVV() { return _t2v; }
 
    private:
-    friend class KVBucket;
     bool _has_lock;
     bool _has_intent;
     TxIdentifier _holder;
-    txindex::ValuePtr _intent_value;
-    txindex::MultiVersionValue _t2v;
-    std::unordered_map<TimeStamp, TxIdentifier> _readers;
+    ValuePtr _intent_value;
+    MultiVersionValue _t2v;
+    ReaderMap _readers;
 };
 
 class KVBucket : public txindex::TxIndex {

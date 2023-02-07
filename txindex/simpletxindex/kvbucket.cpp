@@ -36,13 +36,13 @@ extern "C" void* CallbackWrapper(void* arg) {
         }                                                                 \
     } while (0);
 
-#define CHECK_READ_WRITE_DEP(mv, txid, deps)                             \
-    do {                                                                 \
-        for (auto iter = mv._readers.begin(); iter != mv._readers.end(); \
-             iter++) {                                                   \
-            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,     \
-                                        iter->first, txid.start_ts()});  \
-        }                                                                \
+#define CHECK_READ_WRITE_DEP(mv, txid, deps)                               \
+    do {                                                                   \
+        for (auto iter = mv.Readers().begin(); iter != mv.Readers().end(); \
+             iter++) {                                                     \
+            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,       \
+                                        iter->first, txid.start_ts()});    \
+        }                                                                  \
     } while (0);
 
 namespace azino {
@@ -88,8 +88,7 @@ TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
 
     CHECK_READ_WRITE_DEP(mv, txid, deps)
 
-    mv._has_lock = true;
-    mv._holder = txid;
+    mv.Lock(txid);
     sts.set_error_code(TxOpStatus_Code_Ok);
     sts.set_error_message(ss.str());
     return sts;
@@ -140,10 +139,7 @@ TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
 
     CHECK_READ_WRITE_DEP(mv, txid, deps)
 
-    mv._has_lock = false;
-    mv._has_intent = true;
-    mv._holder = txid;
-    mv._intent_value.reset(new Value(v));
+    mv.Prewrite(v, txid);
     sts.set_error_code(TxOpStatus_Code_Ok);
     sts.set_error_message(ss.str());
     return sts;
@@ -184,10 +180,7 @@ TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
     sts.set_error_code(TxOpStatus_Code_Ok);
     sts.set_error_message(ss.str());
 
-    mv._holder.Clear();
-    mv._intent_value.reset();
-    mv._has_intent = false;
-    mv._has_lock = false;
+    mv.Clean();
 
     if (_blocked_ops.find(key) != _blocked_ops.end()) {
         auto iter = _blocked_ops.find(key);
@@ -238,12 +231,7 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
     sts.set_error_code(TxOpStatus_Code_Ok);
     sts.set_error_message(ss.str());
 
-    mv._holder.Clear();
-    mv._t2v.insert(
-        std::make_pair(txid.commit_ts(), std::move(mv._intent_value)));
-    mv._has_intent = false;
-    mv._has_lock = false;
-    mv.ClearReaders();
+    mv.Commit(txid);
 
     if (_blocked_ops.find(key) != _blocked_ops.end()) {
         auto iter = _blocked_ops.find(key);
@@ -345,13 +333,13 @@ TxOpStatus KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas) {
     std::stringstream ss;
     unsigned long cnt = 0;
     for (auto& it : _kvs) {
-        if (it.second._t2v.empty()) {
+        if (it.second.Size() == 0) {
             continue;
         }
         txindex::DataToPersist d;
         d.key = it.first;
-        d.t2vs = it.second._t2v;
-        cnt += it.second._t2v.size();
+        d.t2vs = it.second.MVV();
+        cnt += it.second.MVV().size();
         datas.push_back(d);
     }
     if (cnt == 0) {

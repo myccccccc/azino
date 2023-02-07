@@ -5,6 +5,29 @@
 namespace azino {
 namespace txindex {
 
+void MVCCValue::Lock(const TxIdentifier& txid) {
+    _has_lock = true;
+    _holder.CopyFrom(txid);
+}
+void MVCCValue::Prewrite(const Value& v, const TxIdentifier& txid) {
+    _has_lock = false;
+    _has_intent = true;
+    _holder.CopyFrom(txid);
+    _intent_value.reset(new Value(v));
+}
+void MVCCValue::Clean() {
+    _holder.Clear();
+    _intent_value.reset();
+    _has_intent = false;
+    _has_lock = false;
+}
+void MVCCValue::Commit(const TxIdentifier& txid) {
+    _holder.Clear();
+    _t2v.insert(std::make_pair(txid.commit_ts(), std::move(_intent_value)));
+    _has_intent = false;
+    _has_lock = false;
+}
+
 std::pair<TimeStamp, txindex::ValuePtr> MVCCValue::LargestTSValue() const {
     if (_t2v.empty()) {
         return std::make_pair(MIN_TIMESTAMP, nullptr);

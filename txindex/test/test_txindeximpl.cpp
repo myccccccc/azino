@@ -505,17 +505,23 @@ TEST_F(TxIndexImplTest, write_dep_report) {
                       deps)
             .error_code());
 
-    ASSERT_EQ(1, deps.size());
+    ASSERT_EQ(2, deps.size());
     ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
     ASSERT_EQ(t2.start_ts(), deps[0].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
+    ASSERT_EQ(t1.start_ts(), deps[1].ts1);
+    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
+    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
 
     deps.clear();
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v2, t2, deps).error_code());
 
-    ASSERT_EQ(1, deps.size());
+    ASSERT_EQ(2, deps.size());
     ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
     ASSERT_EQ(t2.start_ts(), deps[0].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
+    ASSERT_EQ(t1.start_ts(), deps[1].ts1);
+    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
+    ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
 }
