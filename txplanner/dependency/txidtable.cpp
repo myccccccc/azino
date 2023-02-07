@@ -23,7 +23,7 @@ std::pair<TxIDPtr, TxIDPtr> TxIDTable::AddDep(DepType type,
         LOG(ERROR) << "Fail to add dependency type: " << type
                    << "t1: " << t1.ShortDebugString() << "(not found) "
                    << "t2: " << t2.ShortDebugString();
-        goto out;
+        return std::make_pair(nullptr, nullptr);
     } else {
         p1 = _table[t1.start_ts()];
     }
@@ -32,15 +32,31 @@ std::pair<TxIDPtr, TxIDPtr> TxIDTable::AddDep(DepType type,
         LOG(ERROR) << "Fail to add dependency type: " << type
                    << "t1: " << t1.ShortDebugString()
                    << "t2: " << t2.ShortDebugString() << "(not found) ";
-        goto out;
+        return std::make_pair(nullptr, nullptr);
     } else {
         p2 = _table[t2.start_ts()];
+    }
+
+    if (p1->txid.status().status_code() == TxStatus_Code_Abort ||
+        p2->txid.status().status_code() == TxStatus_Code_Abort) {
+        LOG(ERROR) << "Fail to add dependency type: " << type
+                   << "t1: " << t1.ShortDebugString()
+                   << "t2: " << t2.ShortDebugString() << "someone is aborted";
+        return std::make_pair(nullptr, nullptr);
+    }
+
+    if (p1->txid.status().status_code() == TxStatus_Code_Commit &&
+        p1->txid.commit_ts() < p2->txid.start_ts()) {
+        LOG(ERROR) << "Fail to add dependency type: " << type
+                   << "t1: " << t1.ShortDebugString()
+                   << "t2: " << t2.ShortDebugString()
+                   << "they are not concurrent";
+        return std::make_pair(nullptr, nullptr);
     }
 
     p1->out.insert(p2);
     p2->in.insert(p1);
 
-out:
     return std::make_pair(p1, p2);
 }
 
@@ -196,9 +212,6 @@ TxIDPtr TxIDTable::AbortTx(const TxIdentifier& txid) {
 void TxIDTable::_update_txid(TxIDPtr p, const TxIdentifier& txid) {
     p->txid.CopyFrom(txid);
     _table[txid.start_ts()] = p;
-    if (txid.has_commit_ts()) {
-        _table[txid.commit_ts()] = p;
-    }
 }
 
 }  // namespace txplanner

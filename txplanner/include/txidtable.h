@@ -39,8 +39,7 @@ class TxIDTable {
    private:
     void _update_txid(TxIDPtr p, const TxIdentifier& txid);
     bthread::Mutex _m;
-    TxIDPtrMap _table;  // ts can be start_ts or commit_ts, their value must
-                        // point at the same TxID
+    TxIDPtrMap _table;  // ts is start_ts
 };
 
 }  // namespace txplanner
