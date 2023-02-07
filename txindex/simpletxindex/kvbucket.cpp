@@ -12,24 +12,17 @@
 #include "persistor.h"
 #include "reporter.h"
 
-extern "C" void* CallbackWrapper(void* arg) {
-    auto* func = reinterpret_cast<std::function<void()>*>(arg);
-    func->operator()();
-    delete func;
-    return nullptr;
-}
-
 // todo: need to consider the ltv in the storage
 #define CHECK_WRITE_TOO_LATE(type)                                        \
     do {                                                                  \
-        auto ltv = mv.LargestTSValue();                                   \
-        if (ltv.first >= txid.start_ts()) {                               \
+        auto iter = mv.LargestTSValue();                                  \
+        if (iter != mv.MVV().end() && iter->first >= txid.start_ts()) {   \
             ss << "Tx(" << txid.ShortDebugString() << ") write " << #type \
                << " on "                                                  \
                << "key: " << key << " too late. "                         \
                << "Find "                                                 \
-               << "largest ts: " << ltv.first                             \
-               << " value: " << ltv.second->ShortDebugString();           \
+               << "largest ts: " << iter->first                           \
+               << " value: " << iter->second->ShortDebugString();         \
             sts.set_error_code(TxOpStatus_Code_WriteTooLate);             \
             sts.set_error_message(ss.str());                              \
             return sts;                                                   \
@@ -71,7 +64,7 @@ TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
                << (mv.HasLock() ? "" : mv.IntentValue()->ShortDebugString());
             sts.set_error_code(TxOpStatus_Code_WriteBlock);
             sts.set_error_message(ss.str());
-            _blocked_ops[key].push_back(callback);
+            mv.AddWaiter(callback);
             return sts;
         }
 
@@ -182,18 +175,7 @@ TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
 
     mv.Clean();
 
-    if (_blocked_ops.find(key) != _blocked_ops.end()) {
-        auto iter = _blocked_ops.find(key);
-        for (auto& func : iter->second) {
-            bthread_t bid;
-            auto* arg = new std::function<void()>(func);
-            if (bthread_start_background(&bid, nullptr, CallbackWrapper, arg) !=
-                0) {
-                LOG(ERROR) << "Failed to start callback.";
-            }
-        }
-        iter->second.clear();
-    }
+    mv.WakeUpWaiters();
 
     return sts;
 }
@@ -233,18 +215,7 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
 
     mv.Commit(txid);
 
-    if (_blocked_ops.find(key) != _blocked_ops.end()) {
-        auto iter = _blocked_ops.find(key);
-        for (auto& func : iter->second) {
-            bthread_t bid;
-            auto* arg = new std::function<void()>(func);
-            if (bthread_start_background(&bid, nullptr, CallbackWrapper, arg) !=
-                0) {
-                LOG(ERROR) << "Failed to start callback.";
-            }
-        }
-        iter->second.clear();
-    }
+    mv.WakeUpWaiters();
 
     return sts;
 }
@@ -286,7 +257,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
            << ") value: " << mv.IntentValue()->ShortDebugString();
         sts.set_error_code(TxOpStatus_Code_ReadBlock);
         sts.set_error_message(ss.str());
-        _blocked_ops[key].push_back(callback);
+        mv.AddWaiter(callback);
         return sts;
     }
 
@@ -297,32 +268,32 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     }
 
     // committed RW dep
-    auto rsv = mv.ReverseSeek(txid.start_ts());
-    while (rsv.second) {
+    auto iter = mv.LargestTSValue();
+    while (iter != mv.MVV().end() && iter->first > txid.start_ts()) {
         deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
-                                    txid.start_ts(), rsv.first});
-        rsv = mv.ReverseSeek(rsv.first);
+                                    txid.start_ts(), iter->first});
+        iter++;
     }
 
     // add reader
     mv.AddReader(txid);
 
-    auto sv = mv.Seek(txid.start_ts());
-    if (sv.second) {
+    iter = mv.Seek(txid.start_ts());
+    if (iter != mv.MVV().end()) {
         ss << "Tx(" << txid.ShortDebugString() << ") read on "
            << "key: " << key << " success. "
            << "Find "
-           << "ts: " << sv.first << " value: " << sv.second->ShortDebugString();
+           << "ts: " << iter->first
+           << " value: " << iter->second->ShortDebugString();
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());
-        v.CopyFrom(*(sv.second));
-        return sts;
+        v.CopyFrom(*(iter->second));
+    } else {
+        ss << "Tx(" << txid.ShortDebugString() << ") read on "
+           << "key: " << key << " not exist. ";
+        sts.set_error_code(TxOpStatus_Code_ReadNotExist);
+        sts.set_error_message(ss.str());
     }
-
-    ss << "Tx(" << txid.ShortDebugString() << ") read on "
-       << "key: " << key << " not exist. ";
-    sts.set_error_code(TxOpStatus_Code_ReadNotExist);
-    sts.set_error_message(ss.str());
     return sts;
 }
 

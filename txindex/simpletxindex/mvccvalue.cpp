@@ -2,6 +2,13 @@
 
 #include "index.h"
 
+extern "C" void* CallbackWrapper(void* arg) {
+    auto* func = reinterpret_cast<std::function<void()>*>(arg);
+    func->operator()();
+    delete func;
+    return nullptr;
+}
+
 namespace azino {
 namespace txindex {
 
@@ -28,29 +35,12 @@ void MVCCValue::Commit(const TxIdentifier& txid) {
     _has_lock = false;
 }
 
-std::pair<TimeStamp, txindex::ValuePtr> MVCCValue::LargestTSValue() const {
-    if (_t2v.empty()) {
-        return std::make_pair(MIN_TIMESTAMP, nullptr);
-    }
-    auto iter = _t2v.begin();
-    return std::make_pair(iter->first, iter->second);
+MultiVersionValue::const_iterator MVCCValue::LargestTSValue() const {
+    return _t2v.begin();
 }
 
-std::pair<TimeStamp, txindex::ValuePtr> MVCCValue::Seek(TimeStamp ts) {
-    auto iter = _t2v.lower_bound(ts);
-    if (iter == _t2v.end()) {
-        return std::make_pair(MAX_TIMESTAMP, nullptr);
-    }
-    return std::make_pair(iter->first, iter->second);
-}
-
-std::pair<TimeStamp, txindex::ValuePtr> MVCCValue::ReverseSeek(TimeStamp ts) {
-    auto iter = _t2v.lower_bound(ts);
-    if (iter == _t2v.begin()) {
-        return std::make_pair(MIN_TIMESTAMP, nullptr);
-    }
-    iter--;
-    return std::make_pair(iter->first, iter->second);
+MultiVersionValue::const_iterator MVCCValue::Seek(TimeStamp ts) const {
+    return _t2v.lower_bound(ts);
 }
 
 unsigned MVCCValue::Truncate(TimeStamp ts) {
@@ -58,6 +48,18 @@ unsigned MVCCValue::Truncate(TimeStamp ts) {
     auto ans = _t2v.size();
     _t2v.erase(iter, _t2v.end());
     return ans - _t2v.size();
+}
+
+void MVCCValue::WakeUpWaiters() {
+    for (auto& func : _waiters) {
+        bthread_t bid;
+        auto* arg = new std::function<void()>(func);
+        if (bthread_start_background(&bid, nullptr, CallbackWrapper, arg) !=
+            0) {
+            LOG(ERROR) << "Failed to start callback.";
+        }
+    }
+    _waiters.clear();
 }
 
 }  // namespace txindex

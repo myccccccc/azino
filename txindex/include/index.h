@@ -16,12 +16,7 @@ DECLARE_int32(latch_bucket_num);
 
 namespace azino {
 namespace txindex {
-
 struct DataToPersist;
-typedef std::shared_ptr<Value> ValuePtr;
-typedef std::map<TimeStamp, ValuePtr, std::greater<TimeStamp>>
-    MultiVersionValue;
-typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
 
 class TxIndex {
    public:
@@ -78,6 +73,11 @@ class TxIndex {
         const std::vector<DataToPersist>& datas) = 0;
 };
 
+typedef std::shared_ptr<Value> ValuePtr;
+typedef std::map<TimeStamp, ValuePtr, std::greater<TimeStamp>>
+    MultiVersionValue;
+typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
+
 class MVCCValue {
    public:
     MVCCValue() : _has_lock(false), _has_intent(false), _holder(), _t2v() {}
@@ -93,13 +93,10 @@ class MVCCValue {
     void Clean();
     void Commit(const TxIdentifier& txid);
 
-    std::pair<TimeStamp, txindex::ValuePtr> LargestTSValue() const;
+    MultiVersionValue::const_iterator LargestTSValue() const;
 
     // Finds committed values whose timestamp is smaller or equal than "ts"
-    std::pair<TimeStamp, txindex::ValuePtr> Seek(TimeStamp ts);
-
-    // Finds committed values whose timestamp is bigger than "ts"
-    std::pair<TimeStamp, txindex::ValuePtr> ReverseSeek(TimeStamp ts);
+    MultiVersionValue::const_iterator Seek(TimeStamp ts) const;
 
     // Truncate committed values whose timestamp is smaller or equal than "ts",
     // return the number of values truncated
@@ -112,6 +109,11 @@ class MVCCValue {
 
     inline MultiVersionValue& MVV() { return _t2v; }
 
+    inline void AddWaiter(const std::function<void()>& fn) {
+        _waiters.push_back(fn);
+    }
+    void WakeUpWaiters();
+
    private:
     bool _has_lock;
     bool _has_intent;
@@ -119,6 +121,7 @@ class MVCCValue {
     ValuePtr _intent_value;
     MultiVersionValue _t2v;
     ReaderMap _readers;
+    std::vector<std::function<void()>> _waiters;
 };
 
 class KVBucket : public txindex::TxIndex {
@@ -149,8 +152,6 @@ class KVBucket : public txindex::TxIndex {
 
    private:
     std::unordered_map<std::string, MVCCValue> _kvs;
-    std::unordered_map<std::string, std::vector<std::function<void()>>>
-        _blocked_ops;
     bthread::Mutex _latch;
 };
 

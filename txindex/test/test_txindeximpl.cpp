@@ -468,10 +468,10 @@ TEST_F(TxIndexImplTest, read_dep_report) {
     ASSERT_EQ(write_tx_7.start_ts(), deps[0].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
     ASSERT_EQ(read_tx_2.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t1.commit_ts(), deps[1].ts2);
+    ASSERT_EQ(t2.commit_ts(), deps[1].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
     ASSERT_EQ(read_tx_2.start_ts(), deps[2].ts1);
-    ASSERT_EQ(t2.commit_ts(), deps[2].ts2);
+    ASSERT_EQ(t1.commit_ts(), deps[2].ts2);
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[2].type);
 }
 
