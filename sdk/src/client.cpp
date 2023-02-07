@@ -150,7 +150,7 @@ Status Transaction::Commit() {
     _txid->set_allocated_status(txid_sts);
     if (_txid->status().status_code() != TxStatus_Code_Commit) {
         ss << " Wrong tx status code when commit: "
-           << _txid->status().status_code();
+           << _txid->ShortDebugString();
         preput_sts = Status::TxPlannerErr(ss.str());
         goto abort;
     }
@@ -182,8 +182,7 @@ abort:
     txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
     if (_txid->status().status_code() != TxStatus_Code_Abort) {
-        ss << " Wrong tx status code when abort: "
-           << _txid->status().status_code();
+        ss << " Wrong tx status code when abort: " << _txid->ShortDebugString();
         return Status::TxPlannerErr(ss.str());
     }
 
