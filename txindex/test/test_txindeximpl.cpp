@@ -464,14 +464,14 @@ TEST_F(TxIndexImplTest, read_dep_report) {
               azino::TxOpStatus_Code_ReadNotExist);
 
     ASSERT_EQ(3, deps.size());
-    ASSERT_EQ(read_tx_2.start_ts(), deps[0].ts1);
-    ASSERT_EQ(write_tx_7.start_ts(), deps[0].ts2);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[0].t1.start_ts());
+    ASSERT_EQ(write_tx_7.start_ts(), deps[0].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
-    ASSERT_EQ(read_tx_2.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.commit_ts(), deps[1].ts2);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[1].t1.start_ts());
+    ASSERT_EQ(t2.commit_ts(), deps[1].t2.commit_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
-    ASSERT_EQ(read_tx_2.start_ts(), deps[2].ts1);
-    ASSERT_EQ(t1.commit_ts(), deps[2].ts2);
+    ASSERT_EQ(read_tx_2.start_ts(), deps[2].t1.start_ts());
+    ASSERT_EQ(t1.commit_ts(), deps[2].t2.commit_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[2].type);
 }
 
@@ -484,8 +484,8 @@ TEST_F(TxIndexImplTest, write_dep_report) {
               ti->WriteIntent(k1, v1, t1, deps).error_code());
 
     ASSERT_EQ(1, deps.size());
-    ASSERT_EQ(t1.start_ts(), deps[0].ts1);
-    ASSERT_EQ(t1.start_ts(), deps[0].ts2);
+    ASSERT_EQ(t1.start_ts(), deps[0].t1.start_ts());
+    ASSERT_EQ(t1.start_ts(), deps[0].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
 
     t1.set_commit_ts(3);
@@ -506,11 +506,11 @@ TEST_F(TxIndexImplTest, write_dep_report) {
             .error_code());
 
     ASSERT_EQ(2, deps.size());
-    ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[0].ts2);
+    ASSERT_EQ(read_tx_4.start_ts(), deps[0].t1.start_ts());
+    ASSERT_EQ(t2.start_ts(), deps[0].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
-    ASSERT_EQ(t1.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
+    ASSERT_EQ(t1.start_ts(), deps[1].t1.start_ts());
+    ASSERT_EQ(t2.start_ts(), deps[1].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
 
     deps.clear();
@@ -518,10 +518,10 @@ TEST_F(TxIndexImplTest, write_dep_report) {
               ti->WriteIntent(k1, v2, t2, deps).error_code());
 
     ASSERT_EQ(2, deps.size());
-    ASSERT_EQ(read_tx_4.start_ts(), deps[0].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[0].ts2);
+    ASSERT_EQ(read_tx_4.start_ts(), deps[0].t1.start_ts());
+    ASSERT_EQ(t2.start_ts(), deps[0].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[0].type);
-    ASSERT_EQ(t1.start_ts(), deps[1].ts1);
-    ASSERT_EQ(t2.start_ts(), deps[1].ts2);
+    ASSERT_EQ(t1.start_ts(), deps[1].t1.start_ts());
+    ASSERT_EQ(t2.start_ts(), deps[1].t2.start_ts());
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
 }

@@ -16,12 +16,13 @@
 #define CHECK_WRITE_TOO_LATE(type)                                        \
     do {                                                                  \
         auto iter = mv.LargestTSValue();                                  \
-        if (iter != mv.MVV().end() && iter->first >= txid.start_ts()) {   \
+        if (iter != mv.MVV().end() &&                                     \
+            iter->first.commit_ts() >= txid.start_ts()) {                 \
             ss << "Tx(" << txid.ShortDebugString() << ") write " << #type \
                << " on "                                                  \
                << "key: " << key << " too late. "                         \
                << "Find "                                                 \
-               << "largest ts: " << iter->first                           \
+               << "largest version: " << iter->first.ShortDebugString()   \
                << " value: " << iter->second->ShortDebugString();         \
             sts.set_error_code(TxOpStatus_Code_WriteTooLate);             \
             sts.set_error_message(ss.str());                              \
@@ -34,7 +35,7 @@
         for (auto iter = mv.Readers().begin(); iter != mv.Readers().end(); \
              iter++) {                                                     \
             deps.push_back(txindex::Dep{txindex::DepType::READWRITE,       \
-                                        iter->first, txid.start_ts()});    \
+                                        iter->second, txid});              \
         }                                                                  \
     } while (0);
 
@@ -263,15 +264,16 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
 
     // uncommitted RW dep
     if (mv.HasIntent() || mv.HasLock()) {
-        deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
-                                    txid.start_ts(), mv.Holder().start_ts()});
+        deps.push_back(
+            txindex::Dep{txindex::DepType::READWRITE, txid, mv.Holder()});
     }
 
     // committed RW dep
     auto iter = mv.LargestTSValue();
-    while (iter != mv.MVV().end() && iter->first > txid.start_ts()) {
-        deps.push_back(txindex::Dep{txindex::DepType::READWRITE,
-                                    txid.start_ts(), iter->first});
+    while (iter != mv.MVV().end() &&
+           iter->first.commit_ts() > txid.start_ts()) {
+        deps.push_back(
+            txindex::Dep{txindex::DepType::READWRITE, txid, iter->first});
         iter++;
     }
 
@@ -283,7 +285,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
         ss << "Tx(" << txid.ShortDebugString() << ") read on "
            << "key: " << key << " success. "
            << "Find "
-           << "ts: " << iter->first
+           << "version: " << iter->first.ShortDebugString()
            << " value: " << iter->second->ShortDebugString();
         sts.set_error_code(TxOpStatus_Code_Ok);
         sts.set_error_message(ss.str());

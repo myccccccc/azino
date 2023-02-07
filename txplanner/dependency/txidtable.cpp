@@ -13,27 +13,35 @@ TxIDPtrSet TxIDTable::List() {
     return res;
 }
 
-int TxIDTable::AddDep(DepType type, TimeStamp ts1, TimeStamp ts2) {
+std::pair<TxIDPtr, TxIDPtr> TxIDTable::AddDep(DepType type,
+                                              const TxIdentifier& t1,
+                                              const TxIdentifier& t2) {
     std::lock_guard<bthread::Mutex> lck(_m);
+    TxIDPtr p1, p2;
 
-    if (_table.find(ts1) == _table.end()) {
-        LOG(ERROR) << "Fail to add dependency type: " << type << "ts1: " << ts1
-                   << "(not found) "
-                   << "ts2: " << ts2;
-        return ENOENT;
+    if (_table.find(t1.start_ts()) == _table.end()) {
+        LOG(ERROR) << "Fail to add dependency type: " << type
+                   << "t1: " << t1.ShortDebugString() << "(not found) "
+                   << "t2: " << t2.ShortDebugString();
+        goto out;
+    } else {
+        p1 = _table[t1.start_ts()];
     }
-    auto p1 = _table[ts1];
 
-    if (_table.find(ts2) == _table.end()) {
-        LOG(ERROR) << "Fail to add dependency type: " << type << "ts1: " << ts1
-                   << "ts2: " << ts2 << "(not found) ";
-        return ENOENT;
+    if (_table.find(t2.start_ts()) == _table.end()) {
+        LOG(ERROR) << "Fail to add dependency type: " << type
+                   << "t1: " << t1.ShortDebugString()
+                   << "t2: " << t2.ShortDebugString() << "(not found) ";
+        goto out;
+    } else {
+        p2 = _table[t2.start_ts()];
     }
-    auto p2 = _table[ts2];
 
-    _table[ts1]->out.insert(p2);
-    _table[ts2]->in.insert(p1);
-    return 0;
+    p1->out.insert(p2);
+    p2->in.insert(p1);
+
+out:
+    return std::make_pair(p1, p2);
 }
 
 int TxIDTable::EarlyValidateTxID(
@@ -80,15 +88,9 @@ TxIDPtrSet FindAbort(const TxIDPtr& t1, const TxIDPtr& t2, const TxIDPtr& t3) {
     return res;
 }
 
-TxIDPtrSet TxIDTable::FindAbortTxnOnConsecutiveRWDep(TimeStamp ts) {
+TxIDPtrSet TxIDTable::FindAbortTxnOnConsecutiveRWDep(TxIDPtr tx) {
     std::lock_guard<bthread::Mutex> lck(_m);
     TxIDPtrSet res;
-
-    if (_table.find(ts) == _table.end()) {
-        LOG(ERROR) << "Fail to FindAbortTxnOnConsecutiveRWDep TxID: " << ts;
-        return res;
-    }
-    auto tx = _table[ts];
 
     {
         auto t3 = tx;

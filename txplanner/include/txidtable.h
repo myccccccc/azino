@@ -23,13 +23,14 @@ class TxIDTable {
 
     TxIDPtrSet List();
 
-    int AddDep(DepType type, TimeStamp ts1, TimeStamp ts2);
+    std::pair<TxIDPtr, TxIDPtr> AddDep(DepType type, const TxIdentifier& t1,
+                                       const TxIdentifier& t2);
 
     int EarlyValidateTxID(const TxIdentifier& txid,
                           ::azino::txplanner::ValidateTxResponse* response,
                           ::google::protobuf::Closure* done);
 
-    TxIDPtrSet FindAbortTxnOnConsecutiveRWDep(TimeStamp ts);
+    TxIDPtrSet FindAbortTxnOnConsecutiveRWDep(TxIDPtr t);
 
     TxIDPtr BeginTx(TimeStamp start_ts);
     TxIDPtr CommitTx(const TxIdentifier& txid, TimeStamp commit_ts);

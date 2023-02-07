@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 
 namespace azino {
@@ -14,8 +15,8 @@ enum DepType { READWRITE = 1 };
 
 typedef struct Dep {
     DepType type;
-    uint64_t ts1;
-    uint64_t ts2;
+    TxIdentifier t1;
+    TxIdentifier t2;
 } Dependence;
 
 class DepReporter {
@@ -24,7 +25,7 @@ class DepReporter {
     DISALLOW_COPY_AND_ASSIGN(DepReporter);
     ~DepReporter() = default;
 
-    void ReadWriteReport(const std::string key, uint64_t ts1, uint64_t ts2);
+    void ReadWriteReport(const std::string key, const std::vector<Dep>& deps);
 
    private:
     std::unique_ptr<txplanner::DependenceService_Stub> _stub;

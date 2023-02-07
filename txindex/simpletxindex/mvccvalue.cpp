@@ -30,24 +30,26 @@ void MVCCValue::Clean() {
 }
 void MVCCValue::Commit(const TxIdentifier& txid) {
     _holder.Clear();
-    _t2v.insert(std::make_pair(txid.commit_ts(), std::move(_intent_value)));
+    _mvv.insert(std::make_pair(txid, std::move(_intent_value)));
     _has_intent = false;
     _has_lock = false;
 }
 
 MultiVersionValue::const_iterator MVCCValue::LargestTSValue() const {
-    return _t2v.begin();
+    return _mvv.begin();
 }
 
 MultiVersionValue::const_iterator MVCCValue::Seek(TimeStamp ts) const {
-    return _t2v.lower_bound(ts);
+    TxIdentifier tmp_tx;
+    tmp_tx.set_commit_ts(ts);
+    return _mvv.lower_bound(tmp_tx);
 }
 
-unsigned MVCCValue::Truncate(TimeStamp ts) {
-    auto iter = _t2v.lower_bound(ts);
-    auto ans = _t2v.size();
-    _t2v.erase(iter, _t2v.end());
-    return ans - _t2v.size();
+unsigned MVCCValue::Truncate(const TxIdentifier& txid) {
+    auto iter = _mvv.lower_bound(txid);
+    auto ans = _mvv.size();
+    _mvv.erase(iter, _mvv.end());
+    return ans - _mvv.size();
 }
 
 void MVCCValue::WakeUpWaiters() {

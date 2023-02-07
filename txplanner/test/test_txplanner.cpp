@@ -22,8 +22,8 @@ TEST_F(DependencyTest, graph_basic) {
     auto tx_1 = table->BeginTx(1);
     auto tx_2 = table->BeginTx(2);
     auto tx_5 = table->BeginTx(5);
-    ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 1, 2));
-    ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 2, 5));
+    table->AddDep(azino::txplanner::READWRITE, tx_1->txid, tx_2->txid);
+    table->AddDep(azino::txplanner::READWRITE, tx_2->txid, tx_5->txid);
 
     auto point_set = table->List();
     ASSERT_EQ(3, point_set.size());
@@ -51,33 +51,23 @@ TEST_F(DependencyTest, graph_basic) {
     ASSERT_EQ(1, dep_set.size());
     ASSERT_EQ(2, (*(dep_set.begin()))->id());
 
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_1->txid.start_ts()).size());
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_2->txid.start_ts()).size());
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_5->txid.start_ts()).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_1).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_2).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_5).size());
 
     table->CommitTx(tx_5->txid, 6);
     ASSERT_EQ(TxStatus_Code_Commit, tx_5->txid.status().status_code());
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_1->txid.start_ts()).size());
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_2->txid.start_ts()).size());
-    ASSERT_EQ(
-        0, table->FindAbortTxnOnConsecutiveRWDep(tx_5->txid.start_ts()).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_1).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_2).size());
+    ASSERT_EQ(0, table->FindAbortTxnOnConsecutiveRWDep(tx_5).size());
 
     table->CommitTx(tx_2->txid, 7);
     ASSERT_EQ(TxStatus_Code_Commit, tx_2->txid.status().status_code());
-    ASSERT_EQ(
-        1, table->FindAbortTxnOnConsecutiveRWDep(tx_1->txid.start_ts()).size());
-    ASSERT_EQ(
-        1, table->FindAbortTxnOnConsecutiveRWDep(tx_2->txid.start_ts()).size());
-    ASSERT_EQ(
-        1, table->FindAbortTxnOnConsecutiveRWDep(tx_5->txid.start_ts()).size());
-    ASSERT_EQ(1, (*(table->FindAbortTxnOnConsecutiveRWDep(tx_1->txid.start_ts())
-                        .begin()))
-                     ->id());
+    ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_1).size());
+    ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_2).size());
+    ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_5).size());
+    ASSERT_EQ(1,
+              (*(table->FindAbortTxnOnConsecutiveRWDep(tx_1).begin()))->id());
 
     table->AbortTx(tx_1->txid);
     ASSERT_EQ(TxStatus_Code_Abort, tx_1->txid.status().status_code());
@@ -90,11 +80,9 @@ TEST_F(DependencyTest, graph_basic) {
 TEST_F(DependencyTest, graph_basic2) {
     auto tx_5 = table->BeginTx(5);
     auto tx_6 = table->BeginTx(6);
-    ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 6, 5));
+    table->AddDep(azino::txplanner::READWRITE, tx_6->txid, tx_5->txid);
     table->CommitTx(tx_5->txid, 7);
-    ASSERT_EQ(0, table->AddDep(azino::txplanner::READWRITE, 5, 6));
-    ASSERT_EQ(
-        1, table->FindAbortTxnOnConsecutiveRWDep(tx_5->txid.start_ts()).size());
-    ASSERT_EQ(
-        1, table->FindAbortTxnOnConsecutiveRWDep(tx_6->txid.start_ts()).size());
+    table->AddDep(azino::txplanner::READWRITE, tx_5->txid, tx_6->txid);
+    ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_5).size());
+    ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_6).size());
 }

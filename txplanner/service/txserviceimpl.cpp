@@ -75,7 +75,7 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
     done_guard.release()->Run();
 
     if (txidptr->txid.status().status_code() == TxStatus_Code_Commit) {
-        auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(txidptr->id());
+        auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(txidptr);
         for (auto p : abort_set) {
             LOG(INFO) << " tx: " << p->txid.ShortDebugString()
                       << " will be abort.";

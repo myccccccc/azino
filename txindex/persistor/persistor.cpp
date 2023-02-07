@@ -74,7 +74,7 @@ void Persistor::persist() {
             for (auto &tv : kv.t2vs) {
                 azino::storage::StoreData *d = req.add_datas();
                 d->set_key(kv.key);
-                d->set_ts(tv.first);
+                d->set_ts(tv.first.commit_ts());
                 // req take over the "value *" and will free the memory later
                 d->set_allocated_value(new Value(*tv.second));
             }

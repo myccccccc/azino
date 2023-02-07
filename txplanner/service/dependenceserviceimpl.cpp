@@ -18,25 +18,25 @@ void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
-    int error_code =
-        _tt->AddDep(DepType::READWRITE, request->tx1_ts(), request->tx2_ts());
+    auto p1_p2 = _tt->AddDep(DepType::READWRITE, request->t1(), request->t2());
+    if (p1_p2.first == nullptr || p1_p2.second == nullptr) {
+        return;
+    }
 
     LOG(INFO) << cntl->remote_side() << " Dep report type:"
               << "readwrite"
-              << " key:" << request->key() << " ts1:" << request->tx1_ts()
-              << " ts2:" << request->tx2_ts() << " error_code:" << error_code;
-
-    auto tx1_ts = request->tx1_ts();
-    auto tx2_ts = request->tx2_ts();
+              << " key:" << request->key()
+              << " t1:" << request->t1().ShortDebugString()
+              << " t2:" << request->t2().ShortDebugString();
 
     done_guard.release()->Run();
 
-    auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(tx1_ts);
+    auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(p1_p2.first);
     for (auto p : abort_set) {
         LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
         _tt->AbortTx(p->txid);
     }
-    abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(tx2_ts);
+    abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(p1_p2.second);
     for (auto p : abort_set) {
         LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
         _tt->AbortTx(p->txid);

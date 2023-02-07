@@ -4,17 +4,6 @@
 #include "reporter.h"
 #include "service.h"
 
-#define DO_DEP_REPORT(key, deps)                                             \
-    do {                                                                     \
-        for (size_t i = 0; i < deps.size(); i++) {                           \
-            switch (deps[i].type) {                                          \
-                case DepType::READWRITE:                                     \
-                    _deprpt->ReadWriteReport(key, deps[i].ts1, deps[i].ts2); \
-                    break;                                                   \
-            }                                                                \
-        }                                                                    \
-    } while (0);
-
 namespace azino {
 namespace txindex {
 TxOpServiceImpl::TxOpServiceImpl(const std::string& storage_addr,
@@ -31,11 +20,11 @@ void TxOpServiceImpl::WriteIntent(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    std::string key = request->key();
     std::vector<Dep> deps;
+
     TxOpStatus* sts = new TxOpStatus(_index->WriteIntent(
         request->key(), request->value(), request->txid(), deps));
-
-    DO_DEP_REPORT(request->key(), deps)
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString()
@@ -46,6 +35,9 @@ void TxOpServiceImpl::WriteIntent(
               << " error message: " << sts->error_message();
 
     response->set_allocated_tx_op_status(sts);
+    done_guard.release()->Run();
+
+    _deprpt->ReadWriteReport(key, deps);
 }
 
 void TxOpServiceImpl::WriteLock(
@@ -56,14 +48,14 @@ void TxOpServiceImpl::WriteLock(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    std::string key = request->key();
     std::vector<Dep> deps;
+
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteLock(request->key(), request->txid(),
                           std::bind(&TxOpServiceImpl::WriteLock, this,
                                     controller, request, response, done),
                           deps));
-
-    DO_DEP_REPORT(request->key(), deps)
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString() << " write lock"
@@ -74,9 +66,12 @@ void TxOpServiceImpl::WriteLock(
     if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
         done_guard.release();
         delete sts;
-    } else {
-        response->set_allocated_tx_op_status(sts);
+        return;
     }
+    response->set_allocated_tx_op_status(sts);
+    done_guard.release()->Run();
+
+    _deprpt->ReadWriteReport(key, deps);
 }
 
 void TxOpServiceImpl::Clean(::google::protobuf::RpcController* controller,
@@ -125,14 +120,13 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     Value* v = new Value();
+    std::string key = request->key();
     std::vector<Dep> deps;
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,
                                request, response, done),
                      deps));
-
-    DO_DEP_REPORT(request->key(), deps)
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString() << " read"
@@ -144,10 +138,13 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
         done_guard.release();
         delete sts;
         delete v;
-    } else {
-        response->set_allocated_tx_op_status(sts);
-        response->set_allocated_value(v);
+        return;
     }
+    response->set_allocated_tx_op_status(sts);
+    response->set_allocated_value(v);
+    done_guard.release()->Run();
+
+    _deprpt->ReadWriteReport(key, deps);
 }
 }  // namespace txindex
 }  // namespace azino

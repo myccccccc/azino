@@ -26,25 +26,28 @@ DepReporter::DepReporter(const std::string& txplanner_addr) {
     _stub.reset(new txplanner::DependenceService_Stub(&_channel));
 }
 
-void DepReporter::ReadWriteReport(const std::string key, uint64_t ts1,
-                                  uint64_t ts2) {
-    LOG(INFO) << " Dep report type:"
-              << "readwrite"
-              << " key:" << key << " ts1:" << ts1 << " ts2:" << ts2
-              << " ignore:" << (ts1 == ts2);
-    if (ts1 == ts2) {
-        return;
+void DepReporter::ReadWriteReport(const std::string key,
+                                  const std::vector<Dep>& deps) {
+    for (size_t i = 0; i < deps.size(); i++) {
+        auto& t1 = deps[i].t1;
+        auto& t2 = deps[i].t2;
+        if (t1.start_ts() == t2.start_ts()) {
+            continue;
+        }
+        LOG(INFO) << " Dep report type:"
+                  << "readwrite"
+                  << " key:" << key << " ts:" << t1.ShortDebugString()
+                  << " t2:" << t2.ShortDebugString();
+        brpc::Controller* cntl = new brpc::Controller();
+        azino::txplanner::DepRequest req;
+        req.set_key(key);
+        req.set_allocated_t1(new TxIdentifier(t1));
+        req.set_allocated_t2(new TxIdentifier(t2));
+        txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
+        google::protobuf::Closure* done =
+            brpc::NewCallback(&HandleDepResponse, cntl, resp);
+        _stub->RWDep(cntl, &req, resp, done);
     }
-
-    brpc::Controller* cntl = new brpc::Controller();
-    azino::txplanner::DepRequest req;
-    req.set_key(key);
-    req.set_tx1_ts(ts1);
-    req.set_tx2_ts(ts2);
-    txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
-    google::protobuf::Closure* done =
-        brpc::NewCallback(&HandleDepResponse, cntl, resp);
-    _stub->RWDep(cntl, &req, resp, done);
 }
 
 }  // namespace txindex
