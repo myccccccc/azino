@@ -36,6 +36,8 @@ class TxIDTable {
     TxIDPtr CommitTx(const TxIdentifier& txid, TimeStamp commit_ts);
     TxIDPtr AbortTx(const TxIdentifier& txid);
 
+    TxIDPtrSet GCTx();
+
    private:
     void add_tx(TxIDPtr p);
     void del_tx(TxIDPtr p);
@@ -44,6 +46,7 @@ class TxIDTable {
 
     void add_active_tx(TxIDPtr p);
     void del_active_tx(TxIDPtr p);
+    TxIDPtrSet gc_inactive_tx();
     bthread::Mutex _lock;
     TxIDPtrQueue _active_tx;
     TxIDPtrQueue _done_tx;

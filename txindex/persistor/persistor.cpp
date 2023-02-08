@@ -2,13 +2,14 @@
 
 #include <gflags/gflags.h>
 
-DEFINE_int32(persist_period, 10000,
-             "Persist period time. Measurement: millisecond.");
+DEFINE_int32(persist_period_ms, 1000, "persist period time");
 
 namespace azino {
 namespace txindex {
+
 Persistor::Persistor(TxIndex *index, const std::string &storage_addr)
-    : _txindex(index), _bid(-1), _stopped(true) {
+    : _txindex(index) {
+    fn = Persistor::execute;
     brpc::ChannelOptions option;
     if (_channel.Init(storage_addr.c_str(), &option) != 0) {
         LOG(ERROR) << "Fail to initialize channel";
@@ -16,42 +17,15 @@ Persistor::Persistor(TxIndex *index, const std::string &storage_addr)
     _stub.reset(new storage::StorageService_Stub(&_channel));
 }
 
-int Persistor::Start() {
-    {
-        std::lock_guard<bthread::Mutex> lck(_mutex);
-        if (!_stopped) {
-            return -1;
-        } else {
-            _stopped = false;
-        }
-    }
-    return bthread_start_background(&_bid, NULL, execute, this);
-}
-
-int Persistor::Stop() {
-    {
-        // reset _stopped, if the bthread wake up and found _stopped, it will
-        // exit.
-        std::lock_guard<bthread::Mutex> lck(_mutex);
-        if (_stopped) {
-            return -1;
-        } else {
-            _stopped = true;
-        }
-    }
-
-    bthread_stop(_bid);
-    return bthread_join(_bid, NULL);
-}
-
 void *Persistor::execute(void *args) {
     auto p = reinterpret_cast<Persistor *>(args);
     while (true) {
-        bthread_usleep(FLAGS_persist_period * 1000);
-        std::lock_guard<bthread::Mutex> lck(
-            p->_mutex);  // hold the _mutex when persist data.
-        if (p->_stopped) {
-            break;
+        bthread_usleep(FLAGS_persist_period_ms * 1000);
+        {
+            std::lock_guard<bthread::Mutex> lck(p->_mutex);
+            if (p->_stopped) {
+                break;
+            }
         }
         p->persist();
     }

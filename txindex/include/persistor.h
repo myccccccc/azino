@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "azino/background_task.h"
 #include "bthread/bthread.h"
 #include "bthread/mutex.h"
 #include "index.h"
@@ -15,21 +16,11 @@
 namespace azino {
 namespace txindex {
 class TxIndex;
-class Persistor {
+class Persistor : public azino::BackgroundTask {
    public:
     Persistor(TxIndex *index, const std::string &storage_addr);
-
     DISALLOW_COPY_AND_ASSIGN(Persistor);
-
     ~Persistor() = default;
-
-    // Start a new thread and monitor the data. GetPersisting data periodically.
-    // Return 0 if success.
-    int Start();
-
-    // Stop monitor thread. Need call first before the monitoring data destroy.
-    // Return 0 if success.
-    int Stop();
 
    private:
     // Need hold _mutex before call this func.
@@ -43,9 +34,6 @@ class Persistor {
     std::unique_ptr<storage::StorageService_Stub> _stub;
     brpc::Channel _channel;
     TxIndex *_txindex;
-    bthread::Mutex _mutex;
-    bthread_t _bid;
-    bool _stopped;  // protected by _mutex
 };
 
 }  // namespace txindex

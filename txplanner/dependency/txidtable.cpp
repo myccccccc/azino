@@ -199,5 +199,28 @@ void TxIDTable::del_tx(TxIDPtr p) {
     _table.erase(p->start_ts());
 }
 
+TxIDPtrSet TxIDTable::GCTx() {
+    auto res = gc_inactive_tx();
+
+    for (auto p : res) {
+        del_tx(p);
+        LOG(INFO) << "GC Tx " << p->get_txid().ShortDebugString();
+    }
+
+    return res;
+}
+
+TxIDPtrSet TxIDTable::gc_inactive_tx() {
+    std::lock_guard<bthread::Mutex> lck(_lock);
+    TxIDPtrSet res;
+
+    while (!_done_tx.empty() && (*_done_tx.begin())->gc(_min_ats)) {
+        res.insert(*_done_tx.begin());
+        _done_tx.pop_front();
+    }
+
+    return res;
+}
+
 }  // namespace txplanner
 }  // namespace azino

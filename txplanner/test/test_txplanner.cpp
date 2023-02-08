@@ -91,3 +91,26 @@ TEST_F(DependencyTest, graph_basic2) {
     ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_5).size());
     ASSERT_EQ(1, table->FindAbortTxnOnConsecutiveRWDep(tx_6).size());
 }
+
+TEST_F(DependencyTest, gc) {
+    auto tx_1_3 = table->BeginTx(1);
+    auto tx_2_5 = table->BeginTx(2);
+    table->CommitTx(tx_1_3->get_txid(), 3);
+    tx_1_3->set_finished_by_client();
+    ASSERT_EQ(0, table->GCTx().size());
+    auto tx_4_6 = table->BeginTx(4);
+    table->CommitTx(tx_2_5->get_txid(), 5);
+    tx_2_5->set_finished_by_client();
+    ASSERT_EQ(1, table->GCTx().size());
+    auto set = table->List();
+    ASSERT_TRUE(set.find(tx_1_3) == set.end());
+    ASSERT_TRUE(set.find(tx_4_6) != set.end());
+    ASSERT_TRUE(set.find(tx_2_5) != set.end());
+
+    table->CommitTx(tx_4_6->get_txid(), 6);
+    tx_4_6->set_finished_by_client();
+    ASSERT_EQ(2, table->GCTx().size());
+    set = table->List();
+    ASSERT_TRUE(set.find(tx_4_6) == set.end());
+    ASSERT_TRUE(set.find(tx_2_5) == set.end());
+}

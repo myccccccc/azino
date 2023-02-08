@@ -45,6 +45,9 @@ class TxID {
     uint64_t start_ts();
     bool is_abort();
     bool is_commit();
+    inline bool gc(TimeStamp min_ats) {
+        return finished_by_client && min_ats > max_ats_when_done;
+    }
     TxIdentifier get_txid();
     TxIDPtrSet get_in();
     TxIDPtrSet get_out();
