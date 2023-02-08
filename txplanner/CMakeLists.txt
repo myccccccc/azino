@@ -5,7 +5,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/service/txserviceimpl.cpp
                                    ${PROJECT_SOURCE_DIR}/service/dependenceserviceimpl.cpp
                                    ${PROJECT_SOURCE_DIR}/dependency/txidtable.cpp
-                                   ${PROJECT_SOURCE_DIR}/dependency/txid.cpp)
+                                   ${PROJECT_SOURCE_DIR}/dependency/txid.cpp
+                                   ${PROJECT_SOURCE_DIR}/dependency/gc.cpp)
 
 add_library(azino_txplanner::lib ALIAS ${PROJECT_NAME})
 

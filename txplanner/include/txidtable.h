@@ -9,6 +9,7 @@
 
 #include "azino/kv.h"
 #include "dependency.h"
+#include "gc.h"
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 #include "txid.h"
@@ -18,8 +19,8 @@ namespace txplanner {
 
 class TxIDTable {
    public:
-    TxIDTable() = default;
-    ~TxIDTable() = default;
+    TxIDTable();
+    ~TxIDTable();
 
     TxIDPtrSet List();
 
@@ -52,6 +53,8 @@ class TxIDTable {
     TxIDPtrQueue _done_tx;
     TimeStamp _min_ats = MAX_TIMESTAMP;
     TimeStamp _max_ats = MIN_TIMESTAMP;
+
+    GC gc;
 };
 
 }  // namespace txplanner

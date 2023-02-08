@@ -1,5 +1,9 @@
 #include "txidtable.h"
 
+#include <gflags/gflags.h>
+
+DEFINE_bool(enable_gc, true, "enable gc tx");
+
 namespace azino {
 namespace txplanner {
 
@@ -221,6 +225,14 @@ TxIDPtrSet TxIDTable::gc_inactive_tx() {
 
     return res;
 }
+
+TxIDTable::TxIDTable() : gc(this) {
+    if (FLAGS_enable_gc) {
+        gc.Start();
+    }
+}
+
+TxIDTable::~TxIDTable() { gc.Stop(); }
 
 }  // namespace txplanner
 }  // namespace azino
