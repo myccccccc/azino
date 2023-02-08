@@ -33,13 +33,15 @@ void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
 
     auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(p1_p2.first);
     for (auto p : abort_set) {
-        LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
-        _tt->AbortTx(p->txid);
+        LOG(INFO) << " tx: " << p->get_txid().ShortDebugString()
+                  << " will be abort.";
+        _tt->AbortTx(p->get_txid());
     }
     abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(p1_p2.second);
     for (auto p : abort_set) {
-        LOG(INFO) << " tx: " << p->txid.ShortDebugString() << " will be abort.";
-        _tt->AbortTx(p->txid);
+        LOG(INFO) << " tx: " << p->get_txid().ShortDebugString()
+                  << " will be abort.";
+        _tt->AbortTx(p->get_txid());
     }
 }
 

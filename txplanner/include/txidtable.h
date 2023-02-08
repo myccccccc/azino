@@ -37,9 +37,18 @@ class TxIDTable {
     TxIDPtr AbortTx(const TxIdentifier& txid);
 
    private:
-    void _update_txid(TxIDPtr p, const TxIdentifier& txid);
-    bthread::Mutex _m;
-    TxIDPtrMap _table;  // ts is start_ts
+    void add_tx(TxIDPtr p);
+    void del_tx(TxIDPtr p);
+    bthread::Mutex _table_lock;  // protect _table
+    TxIDPtrMap _table;           // ts is start_ts
+
+    void add_active_tx(TxIDPtr p);
+    void del_active_tx(TxIDPtr p);
+    bthread::Mutex _lock;
+    TxIDPtrQueue _active_tx;
+    TxIDPtrQueue _done_tx;
+    TimeStamp _min_ats = MAX_TIMESTAMP;
+    TimeStamp _max_ats = MIN_TIMESTAMP;
 };
 
 }  // namespace txplanner

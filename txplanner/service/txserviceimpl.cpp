@@ -40,7 +40,7 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
 
     auto start_ts = _timer->NewTime();
     auto txidptr = _tt->BeginTx(start_ts);
-    auto txid = new TxIdentifier(txidptr->txid);
+    auto txid = new TxIdentifier(txidptr->get_txid());
     response->set_allocated_txid(txid);
 
     for (std::string &addr : _txindex_addrs) {
@@ -67,19 +67,20 @@ void TxServiceImpl::CommitTx(::google::protobuf::RpcController *controller,
 
     auto commit_ts = _timer->NewTime();
     auto txidptr = _tt->CommitTx(request->txid(), commit_ts);
-    auto txid = new TxIdentifier(txidptr->txid);
+    auto txid = new TxIdentifier(txidptr->get_txid());
     response->set_allocated_txid(txid);
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to commit.";
+    txidptr->set_finished_by_client();
     done_guard.release()->Run();
 
-    if (txidptr->txid.status().status_code() == TxStatus_Code_Commit) {
+    if (txidptr->get_txid().status().status_code() == TxStatus_Code_Commit) {
         auto abort_set = _tt->FindAbortTxnOnConsecutiveRWDep(txidptr);
         for (auto p : abort_set) {
-            LOG(INFO) << " tx: " << p->txid.ShortDebugString()
+            LOG(INFO) << " tx: " << p->get_txid().ShortDebugString()
                       << " will be abort.";
-            _tt->AbortTx(p->txid);
+            _tt->AbortTx(p->get_txid());
         }
     }
 }
@@ -98,11 +99,12 @@ void TxServiceImpl::AbortTx(::google::protobuf::RpcController *controller,
     }
 
     auto txidptr = _tt->AbortTx(request->txid());
-    auto txid = new TxIdentifier(txidptr->txid);
+    auto txid = new TxIdentifier(txidptr->get_txid());
     response->set_allocated_txid(txid);
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to abort.";
+    txidptr->set_finished_by_client();
 }
 
 void TxServiceImpl::ValidateTx(
