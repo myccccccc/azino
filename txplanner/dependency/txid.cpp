@@ -51,7 +51,7 @@ void TxID::AddDep(DepType type, const TxIDPtr& p1, const TxIDPtr& p2) {
 
     if (p1->txid.status().status_code() == TxStatus_Code_Abort ||
         p2->txid.status().status_code() == TxStatus_Code_Abort) {
-        LOG(ERROR) << "Fail to add dependency type: " << type
+        LOG(WARNING) << "Fail to add dependency type: " << type
                    << "t1: " << p1->txid.ShortDebugString()
                    << "t2: " << p2->txid.ShortDebugString()
                    << "someone is aborted";
@@ -59,7 +59,7 @@ void TxID::AddDep(DepType type, const TxIDPtr& p1, const TxIDPtr& p2) {
 
     if (p1->txid.status().status_code() == TxStatus_Code_Commit &&
         p1->txid.commit_ts() < p2->txid.start_ts()) {
-        LOG(ERROR) << "Fail to add dependency type: " << type
+        LOG(WARNING) << "Fail to add dependency type: " << type
                    << "t1: " << p1->txid.ShortDebugString()
                    << "t2: " << p2->txid.ShortDebugString()
                    << "they are not concurrent";
@@ -108,7 +108,8 @@ void TxID::commit(TimeStamp commit_ts) {
     std::lock_guard<bthread::Mutex> lck(m);
 
     if (txid.status().status_code() > TxStatus_Code_Preput) {
-        LOG(ERROR) << "unexpected status code when commit tx:"
+        // may happen, client will abort this tx
+        LOG(INFO) << "unexpected status code when commit tx:"
                    << txid.ShortDebugString();
         return;
     }
@@ -121,6 +122,7 @@ void TxID::abort() {
     std::lock_guard<bthread::Mutex> lck(m);
 
     if (txid.status().status_code() > TxStatus_Code_Preput) {
+        // should not happen
         LOG(ERROR) << "unexpected status code when abort tx:"
                    << txid.ShortDebugString();
         return;

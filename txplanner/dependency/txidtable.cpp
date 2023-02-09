@@ -27,7 +27,7 @@ std::pair<TxIDPtr, TxIDPtr> TxIDTable::AddDep(DepType type,
     auto iter2 = _table.find(t2.start_ts());
 
     if (iter1 == _table.end()) {
-        LOG(ERROR) << "Fail to add dependency type: " << type
+        LOG(WARNING) << "Fail to add dependency type: " << type
                    << "t1: " << t1.ShortDebugString() << "(not found) "
                    << "t2: " << t2.ShortDebugString();
         goto out;
@@ -36,7 +36,7 @@ std::pair<TxIDPtr, TxIDPtr> TxIDTable::AddDep(DepType type,
     }
 
     if (iter2 == _table.end()) {
-        LOG(ERROR) << "Fail to add dependency type: " << type
+        LOG(WARNING) << "Fail to add dependency type: " << type
                    << "t1: " << t1.ShortDebugString()
                    << "t2: " << t2.ShortDebugString() << "(not found) ";
         goto out;

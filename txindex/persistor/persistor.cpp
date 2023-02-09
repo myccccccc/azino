@@ -41,13 +41,14 @@ void Persistor::persist() {
     size_t persist_bucket_num =
         (_last_persist_bucket_num + 1) % _region->KVBuckets().size();
     auto cnt = _region->KVBuckets()[persist_bucket_num].GetPersisting(datas);
+    if (cnt == 0) {
+        goto out;
+    }
+
     LOG(INFO) << "get data to persist, region:"
               << " bucket:" << persist_bucket_num
               << " persist key num:" << datas.size()
               << " persist value num:" << cnt;
-    if (cnt == 0) {
-        goto out;
-    }
 
     for (auto &kv : datas) {
         for (auto &tv : kv.t2vs) {
