@@ -2,9 +2,78 @@
 
 std::hash<uint64_t> hash;
 
-#define LOCK2()
+#define LOCK2(p1, p2)                                             \
+    if (p1->start_ts() < p2->start_ts()) {                        \
+        p1->m.lock();                                             \
+        p2->m.lock();                                             \
+    } else {                                                      \
+        p2->m.lock();                                             \
+        p1->m.lock();                                             \
+    }                                                             \
+    std::lock_guard<bthread::Mutex> lck1(p1->m, std::adopt_lock); \
+    std::lock_guard<bthread::Mutex> lck2(p2->m, std::adopt_lock);
 
-#define LOCK3()
+#define LOCK3(p1, p2, p3)                                          \
+    if (p1->start_ts() < p2->start_ts() < p3->start_ts()) {        \
+        p1->m.lock();                                              \
+        p2->m.lock();                                              \
+        p3->m.lock();                                              \
+    } else if (p1->start_ts() < p3->start_ts() < p2->start_ts()) { \
+        p1->m.lock();                                              \
+        p3->m.lock();                                              \
+        p2->m.lock();                                              \
+    } else if (p2->start_ts() < p1->start_ts() < p3->start_ts()) { \
+        p2->m.lock();                                              \
+        p1->m.lock();                                              \
+        p3->m.lock();                                              \
+    } else if (p3->start_ts() < p1->start_ts() < p2->start_ts()) { \
+        p3->m.lock();                                              \
+        p1->m.lock();                                              \
+        p2->m.lock();                                              \
+    } else if (p2->start_ts() < p3->start_ts() < p1->start_ts()) { \
+        p2->m.lock();                                              \
+        p3->m.lock();                                              \
+        p1->m.lock();                                              \
+    } else {                                                       \
+        p3->m.lock();                                              \
+        p2->m.lock();                                              \
+        p1->m.lock();                                              \
+    }                                                              \
+    std::lock_guard<bthread::Mutex> lck1(p1->m, std::adopt_lock);  \
+    std::lock_guard<bthread::Mutex> lck2(p2->m, std::adopt_lock);  \
+    std::lock_guard<bthread::Mutex> lck3(p3->m, std::adopt_lock);
+
+#define FINDABORTTXNONCONSECUTIVERWDEP(t1, t2, t3, res)            \
+    if (t3->txid.status().status_code() !=                         \
+        TxStatus_Code::TxStatus_Code_Commit) {                     \
+        goto out;                                                  \
+    }                                                              \
+    if (t1->out.find(t2) == t1->out.end()) {                       \
+        goto out;                                                  \
+    }                                                              \
+    if (t2->out.find(t3) == t2->out.end()) {                       \
+        goto out;                                                  \
+    }                                                              \
+    if (t1->txid.status().status_code() == TxStatus_Code_Abort ||  \
+        t2->txid.status().status_code() == TxStatus_Code_Abort) {  \
+        goto out;                                                  \
+    }                                                              \
+                                                                   \
+    if (t1->txid.status().status_code() == TxStatus_Code_Commit && \
+        t1->txid.commit_ts() < t3->txid.commit_ts()) {             \
+        goto out;                                                  \
+    }                                                              \
+    if (t2->txid.status().status_code() == TxStatus_Code_Commit && \
+        t2->txid.commit_ts() < t3->txid.commit_ts()) {             \
+        goto out;                                                  \
+    }                                                              \
+                                                                   \
+    if (t1->txid.status().status_code() == TxStatus_Code_Commit) { \
+        res.insert(t2);                                            \
+    }                                                              \
+    if (t2->txid.status().status_code() == TxStatus_Code_Commit) { \
+        res.insert(t1);                                            \
+    }
 
 namespace azino {
 namespace txplanner {
@@ -40,14 +109,14 @@ void TxID::ClearDep(const TxIDPtr& p) {
 }
 
 void TxID::DelDep(const TxIDPtr& p1, const TxIDPtr& p2) {
-    LOCK2()
+    LOCK2(p1, p2)
 
     p1->out.erase(p2);
     p2->in.erase(p1);
 }
 
 void TxID::AddDep(DepType type, const TxIDPtr& p1, const TxIDPtr& p2) {
-    LOCK2()
+    LOCK2(p1, p2)
 
     if (p1->txid.status().status_code() == TxStatus_Code_Abort ||
         p2->txid.status().status_code() == TxStatus_Code_Abort) {
@@ -67,11 +136,6 @@ void TxID::AddDep(DepType type, const TxIDPtr& p1, const TxIDPtr& p2) {
 
     p1->out.insert(p2);
     p2->in.insert(p1);
-}
-
-uint64_t TxID::start_ts() {
-    std::lock_guard<bthread::Mutex> lck(m);
-    return txid.start_ts();
 }
 
 bool TxID::is_abort() {
@@ -101,6 +165,7 @@ TxIDPtr TxID::New(TimeStamp start_ts) {
 
     TxIDPtr p(new TxID);
     p->txid.CopyFrom(txid);
+    p->_start_ts = start_ts;
     return p;
 }
 
@@ -134,43 +199,19 @@ void TxID::abort() {
 TxIDPtrSet TxID::FindAbortTxnOnConsecutiveRWDep(const TxIDPtr& t1,
                                                 const TxIDPtr& t2,
                                                 const TxIDPtr& t3) {
-    LOCK3()
     TxIDPtrSet res;
-
-    if (t3->txid.status().status_code() !=
-        TxStatus_Code::TxStatus_Code_Commit) {
-        goto out;
-    }
-    if (t1->out.find(t2) == t1->out.end()) {
-        goto out;
-    }
-    if (t2->out.find(t3) == t2->out.end()) {
-        goto out;
-    }
-    if (t1->txid.status().status_code() == TxStatus_Code_Abort ||
-        t2->txid.status().status_code() == TxStatus_Code_Abort) {
-        goto out;
-    }
-
-    if (t1->txid.status().status_code() == TxStatus_Code_Commit &&
-        t1->txid.commit_ts() < t3->txid.commit_ts()) {
-        goto out;
-    }
-    if (t2->txid.status().status_code() == TxStatus_Code_Commit &&
-        t2->txid.commit_ts() < t3->txid.commit_ts()) {
-        goto out;
-    }
-
-    if (t1->txid.status().status_code() == TxStatus_Code_Commit) {
-        res.insert(t2);
-    }
-    if (t2->txid.status().status_code() == TxStatus_Code_Commit) {
-        res.insert(t1);
+    if (t1->start_ts() == t3->start_ts()) {
+        LOCK2(t1, t2);
+        FINDABORTTXNONCONSECUTIVERWDEP(t1, t2, t3, res)
+    } else {
+        LOCK3(t1, t2, t3)
+        FINDABORTTXNONCONSECUTIVERWDEP(t1, t2, t3, res)
     }
 
     if (res.size() == 2) {
-        LOG(ERROR) << "Committing all three t1 " << t1->txid.ShortDebugString()
-                   << " t2 " << t2->txid.ShortDebugString() << " t3 "
+        LOG(ERROR) << "find commit all three on consecutive rw dep t1 "
+                   << t1->txid.ShortDebugString() << " t2 "
+                   << t2->txid.ShortDebugString() << " t3 "
                    << t3->txid.ShortDebugString();
     }
 

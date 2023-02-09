@@ -42,7 +42,7 @@ class TxID {
     void abort();
 
     inline bool is_done() { return is_abort() || is_commit(); }
-    uint64_t start_ts();
+    inline uint64_t start_ts() { return _start_ts; }
     bool is_abort();
     bool is_commit();
     inline bool gc(TimeStamp min_ats) {
@@ -68,6 +68,7 @@ class TxID {
 
    private:
     TxID() = default;
+    uint64_t _start_ts;
     bthread::Mutex m;
     TxIdentifier txid;
     TxIDPtrSet in;
