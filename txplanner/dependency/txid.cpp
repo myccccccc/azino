@@ -52,17 +52,17 @@ void TxID::AddDep(DepType type, const TxIDPtr& p1, const TxIDPtr& p2) {
     if (p1->txid.status().status_code() == TxStatus_Code_Abort ||
         p2->txid.status().status_code() == TxStatus_Code_Abort) {
         LOG(WARNING) << "Fail to add dependency type: " << type
-                   << "t1: " << p1->txid.ShortDebugString()
-                   << "t2: " << p2->txid.ShortDebugString()
-                   << "someone is aborted";
+                     << "t1: " << p1->txid.ShortDebugString()
+                     << "t2: " << p2->txid.ShortDebugString()
+                     << "someone is aborted";
     }
 
     if (p1->txid.status().status_code() == TxStatus_Code_Commit &&
         p1->txid.commit_ts() < p2->txid.start_ts()) {
         LOG(WARNING) << "Fail to add dependency type: " << type
-                   << "t1: " << p1->txid.ShortDebugString()
-                   << "t2: " << p2->txid.ShortDebugString()
-                   << "they are not concurrent";
+                     << "t1: " << p1->txid.ShortDebugString()
+                     << "t2: " << p2->txid.ShortDebugString()
+                     << "they are not concurrent";
     }
 
     p1->out.insert(p2);
@@ -110,7 +110,7 @@ void TxID::commit(TimeStamp commit_ts) {
     if (txid.status().status_code() > TxStatus_Code_Preput) {
         // may happen, client will abort this tx
         LOG(INFO) << "unexpected status code when commit tx:"
-                   << txid.ShortDebugString();
+                  << txid.ShortDebugString();
         return;
     }
 
