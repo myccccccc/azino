@@ -1,7 +1,6 @@
 #include <brpc/server.h>
 
 #include "index.h"
-#include "reporter.h"
 #include "service.h"
 
 namespace azino {
@@ -18,10 +17,9 @@ void TxOpServiceImpl::WriteIntent(
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     std::string key = request->key();
-    Deps deps;
 
-    TxOpStatus* sts = new TxOpStatus(_index->WriteIntent(
-        request->key(), request->value(), request->txid(), deps));
+    TxOpStatus* sts = new TxOpStatus(
+        _index->WriteIntent(request->key(), request->value(), request->txid()));
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString()
@@ -43,13 +41,11 @@ void TxOpServiceImpl::WriteLock(
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     std::string key = request->key();
-    Deps deps;
 
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteLock(request->key(), request->txid(),
                           std::bind(&TxOpServiceImpl::WriteLock, this,
-                                    controller, request, response, done),
-                          deps));
+                                    controller, request, response, done)));
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString() << " write lock"
@@ -112,12 +108,10 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
 
     Value* v = new Value();
     std::string key = request->key();
-    Deps deps;
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,
-                               request, response, done),
-                     deps));
+                               request, response, done)));
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString() << " read"

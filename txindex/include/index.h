@@ -31,14 +31,14 @@ class TxIndex {
     // intent or lock exists. Should success if txid already hold this lock.
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback, Deps& deps);
+                                 std::function<void()> callback);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when no newer version of
     // this key, intent or lock exists. Should success if txid already hold this
     // intent or lock, and change lock to intent at the same time.
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid, Deps& deps);
+                                   const TxIdentifier& txid);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when it finds and cleans
@@ -56,7 +56,7 @@ class TxIndex {
     // has the biggest ts among all that have ts smaller than read's ts.
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback, Deps& deps);
+                            std::function<void()> callback);
 
    private:
     brpc::Channel* _storage_channel;
@@ -64,27 +64,20 @@ class TxIndex {
     std::unique_ptr<KVRegion> _region;
 };
 
-class KVBucket : public txindex::TxIndex {
+class KVBucket {
    public:
     KVBucket() = default;
     DISALLOW_COPY_AND_ASSIGN(KVBucket);
     ~KVBucket() = default;
 
-    virtual TxOpStatus WriteLock(const std::string& key,
-                                 const TxIdentifier& txid,
-                                 std::function<void()> callback,
-                                 Deps& deps) override;
-    virtual TxOpStatus WriteIntent(const std::string& key, const Value& v,
-                                   const TxIdentifier& txid,
-                                   Deps& deps) override;
-    virtual TxOpStatus Clean(const std::string& key,
-                             const TxIdentifier& txid) override;
-    virtual TxOpStatus Commit(const std::string& key,
-                              const TxIdentifier& txid) override;
-    virtual TxOpStatus Read(const std::string& key, Value& v,
-                            const TxIdentifier& txid,
-                            std::function<void()> callback,
-                            Deps& deps) override;
+    TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid,
+                         std::function<void()> callback, Deps& deps);
+    TxOpStatus WriteIntent(const std::string& key, const Value& v,
+                           const TxIdentifier& txid, Deps& deps);
+    TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
+    TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
+    TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
+                    std::function<void()> callback, Deps& deps);
     int GetPersisting(std::vector<txindex::DataToPersist>& datas);
     int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
 
@@ -101,19 +94,16 @@ class KVRegion : public txindex::TxIndex {
 
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback,
-                                 Deps& deps) override;
+                                 std::function<void()> callback) override;
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid,
-                                   Deps& deps) override;
+                                   const TxIdentifier& txid) override;
     virtual TxOpStatus Clean(const std::string& key,
                              const TxIdentifier& txid) override;
     virtual TxOpStatus Commit(const std::string& key,
                               const TxIdentifier& txid) override;
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback,
-                            Deps& deps) override;
+                            std::function<void()> callback) override;
 
     inline std::vector<KVBucket>& KVBuckets() { return _kvbs; }
 

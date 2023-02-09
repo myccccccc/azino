@@ -15,7 +15,7 @@ class TxIndexImplTest : public testing::Test {
         bthread_cond_init(&_cv, nullptr);
     }
 
-    azino::txindex::KVRegion* ti;
+    azino::txindex::KVBucket* ti;
     azino::TxIdentifier t1;
     azino::TxIdentifier t2;
     std::string k1 = "key1";
@@ -49,8 +49,7 @@ class TxIndexImplTest : public testing::Test {
         FLAGS_latch_bucket_num = 1;
         FLAGS_enable_persistor = false;
         FLAGS_enable_dep_reporter = false;
-        ti =
-            new azino::txindex::KVRegion(nullptr, nullptr);  //  A dummy address
+        ti = new azino::txindex::KVBucket;  //  A dummy address
         t1.set_start_ts(1);
         t2.set_start_ts(2);
         v1.set_content("tx1value");
@@ -395,7 +394,7 @@ TEST_F(TxIndexImplTest, persist) {
     std::vector<azino::txindex::DataToPersist> datas;
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v1, t1, deps).error_code());
-    ASSERT_EQ(0, ti->KVBuckets().begin()->GetPersisting(datas));
+    ASSERT_EQ(0, ti->GetPersisting(datas));
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
     t2.set_start_ts(4);
@@ -419,13 +418,13 @@ TEST_F(TxIndexImplTest, persist) {
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL, deps).error_code(),
               azino::TxOpStatus_Code_Ok);
     ASSERT_EQ(v2.content(), read_value.content());
-    ASSERT_EQ(2, ti->KVBuckets().begin()->GetPersisting(datas));
+    ASSERT_EQ(2, ti->GetPersisting(datas));
     ASSERT_EQ(datas.size(), 1);
     ASSERT_EQ(datas[0].t2vs.size(), 2);
-    ASSERT_EQ(2, ti->KVBuckets().begin()->ClearPersisted(datas));
-    ASSERT_EQ(0, ti->KVBuckets().begin()->ClearPersisted(datas));
+    ASSERT_EQ(2, ti->ClearPersisted(datas));
+    ASSERT_EQ(0, ti->ClearPersisted(datas));
     datas.clear();
-    ASSERT_EQ(0, ti->KVBuckets().begin()->GetPersisting(datas));
+    ASSERT_EQ(0, ti->GetPersisting(datas));
     ASSERT_EQ(datas.size(), 0);
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL, deps).error_code(),
               azino::TxOpStatus_Code_ReadNotExist);
