@@ -26,11 +26,11 @@
         }                                                                 \
     } while (0);
 
-#define CHECK_READ_WRITE_DEP(mv, txid, deps)                               \
+#define CHECK_READ_WRITE_DEP(key, mv, txid, deps)                          \
     do {                                                                   \
         for (auto iter = mv.Readers().begin(); iter != mv.Readers().end(); \
              iter++) {                                                     \
-            deps.push_back(txindex::Dep{txindex::DepType::READWRITE,       \
+            deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE,  \
                                         iter->second, txid});              \
         }                                                                  \
     } while (0);
@@ -76,7 +76,7 @@ TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
         return sts;
     }
 
-    CHECK_READ_WRITE_DEP(mv, txid, deps)
+    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
 
     mv.Lock(txid);
     sts.set_error_code(TxOpStatus_Code_Ok);
@@ -127,7 +127,7 @@ TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
         }
     }
 
-    CHECK_READ_WRITE_DEP(mv, txid, deps)
+    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
 
     mv.Prewrite(v, txid);
     sts.set_error_code(TxOpStatus_Code_Ok);
@@ -261,7 +261,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     // uncommitted RW dep
     if (mv.HasIntent() || mv.HasLock()) {
         deps.push_back(
-            txindex::Dep{txindex::DepType::READWRITE, txid, mv.Holder()});
+            txindex::Dep{key, txindex::DepType::READWRITE, txid, mv.Holder()});
     }
 
     // committed RW dep
@@ -269,7 +269,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     while (iter != mv.MVV().end() &&
            iter->first.commit_ts() > txid.start_ts()) {
         deps.push_back(
-            txindex::Dep{txindex::DepType::READWRITE, txid, iter->first});
+            txindex::Dep{key, txindex::DepType::READWRITE, txid, iter->first});
         iter++;
     }
 

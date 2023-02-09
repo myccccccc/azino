@@ -21,17 +21,38 @@ void HandleDepResponse(brpc::Controller* cntl, txplanner::DepResponse* resp) {
 }
 
 DepReporter::DepReporter(brpc::Channel* txplaner_channel)
-    : _stub(txplaner_channel) {}
+    : _stub(txplaner_channel), _deps_queue() {
+    bthread::ExecutionQueueOptions options;
+    if (bthread::execution_queue_start(&_deps_queue, &options,
+                                       DepReporter::execute, this) != 0) {
+        LOG(ERROR) << "fail to start execution queue in DepReporter";
+    }
+}
 
-void DepReporter::AsyncReadWriteReport(const std::string& key,
-                                       const std::vector<Dep>& deps) {
-    if (deps.empty()) {
-        return;
+DepReporter::~DepReporter() {
+    if (bthread::execution_queue_stop(_deps_queue) != 0) {
+        LOG(ERROR) << "fail to stop execution queue in DepReporter";
+    }
+    if (bthread::execution_queue_join(_deps_queue) != 0) {
+        LOG(ERROR) << "fail to join execution queue in DepReporter";
+    }
+}
+
+int DepReporter::execute(void* args, bthread::TaskIterator<Deps>& iter) {
+    auto p = reinterpret_cast<DepReporter*>(args);
+    Deps deps;
+    if (iter.is_queue_stopped()) {
+        return 0;
+    }
+    for (; iter; ++iter) {
+        auto& dep = *iter;
+        deps.insert(deps.end(), dep.begin(), dep.end());
     }
 
-    for (size_t i = 0; i < deps.size(); i++) {
-        auto& t1 = deps[i].t1;
-        auto& t2 = deps[i].t2;
+    for (auto& dep : deps) {
+        auto& key = dep.key;
+        auto& t1 = dep.t1;
+        auto& t2 = dep.t2;
         if (t1.start_ts() == t2.start_ts()) {
             continue;
         }
@@ -47,7 +68,17 @@ void DepReporter::AsyncReadWriteReport(const std::string& key,
         txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
         google::protobuf::Closure* done =
             brpc::NewCallback(&HandleDepResponse, cntl, resp);
-        _stub.RWDep(cntl, &req, resp, done);
+        p->_stub.RWDep(cntl, &req, resp, done);
+    }
+    return 0;
+}
+
+void DepReporter::AsyncReadWriteReport(const Deps& deps) {
+    if (deps.empty()) {
+        return;
+    }
+    if (bthread::execution_queue_execute(_deps_queue, deps) != 0) {
+        LOG(ERROR) << "fail to add task execution queue in DepReporter";
     }
 }
 

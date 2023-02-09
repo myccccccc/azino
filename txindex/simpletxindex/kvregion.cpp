@@ -8,9 +8,9 @@
 
 DEFINE_int32(latch_bucket_num, 128, "latch buckets number");
 
-#define DO_RW_DEP_REPORT(ket, deps)              \
-    if (FLAGS_enable_dep_reporter) {             \
-        _deprpt.AsyncReadWriteReport(key, deps); \
+#define DO_RW_DEP_REPORT(deps)              \
+    if (FLAGS_enable_dep_reporter) {        \
+        _deprpt.AsyncReadWriteReport(deps); \
     }
 
 namespace azino {
@@ -37,7 +37,7 @@ TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
                                std::vector<txindex::Dep>& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].WriteLock(key, txid, callback, deps);
-    DO_RW_DEP_REPORT(key, deps);
+    DO_RW_DEP_REPORT(deps);
     return sts;
 }
 
@@ -46,7 +46,7 @@ TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
                                  std::vector<txindex::Dep>& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, deps);
-    DO_RW_DEP_REPORT(key, deps);
+    DO_RW_DEP_REPORT(deps);
     return sts;
 }
 
@@ -66,7 +66,7 @@ TxOpStatus KVRegion::Read(const std::string& key, Value& v,
                           std::vector<txindex::Dep>& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].Read(key, v, txid, callback, deps);
-    DO_RW_DEP_REPORT(key, deps);
+    DO_RW_DEP_REPORT(deps);
     return sts;
 }
 
