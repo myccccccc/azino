@@ -49,27 +49,34 @@ int DepReporter::execute(void* args, bthread::TaskIterator<Deps>& iter) {
         deps.insert(deps.end(), dep.begin(), dep.end());
     }
 
+    brpc::Controller* cntl = new brpc::Controller();
+    azino::txplanner::DepRequest req;
+    txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
+    google::protobuf::Closure* done =
+        brpc::NewCallback(&HandleDepResponse, cntl, resp);
+
     for (auto& dep : deps) {
         auto& key = dep.key;
         auto& t1 = dep.t1;
         auto& t2 = dep.t2;
+
         if (t1.start_ts() == t2.start_ts()) {
             continue;
         }
+
         LOG(INFO) << " Dep report type:"
                   << "readwrite"
                   << " key:" << key << " ts:" << t1.ShortDebugString()
                   << " t2:" << t2.ShortDebugString();
-        brpc::Controller* cntl = new brpc::Controller();
-        azino::txplanner::DepRequest req;
-        req.set_key(key);
-        req.set_allocated_t1(new TxIdentifier(t1));
-        req.set_allocated_t2(new TxIdentifier(t2));
-        txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
-        google::protobuf::Closure* done =
-            brpc::NewCallback(&HandleDepResponse, cntl, resp);
-        p->_stub.RWDep(cntl, &req, resp, done);
+
+        auto pb_dep = req.add_deps();
+        pb_dep->set_key(key);
+        pb_dep->set_allocated_t1(new TxIdentifier(t1));
+        pb_dep->set_allocated_t2(new TxIdentifier(t2));
     }
+
+    p->_stub.RWDep(cntl, &req, resp, done);
+
     return 0;
 }
 
