@@ -39,8 +39,7 @@ namespace azino {
 namespace txindex {
 
 TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
-                               std::function<void()> callback,
-                               std::vector<txindex::Dep>& deps) {
+                               std::function<void()> callback, Deps& deps) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
@@ -85,8 +84,7 @@ TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
 }
 
 TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
-                                 const TxIdentifier& txid,
-                                 std::vector<txindex::Dep>& deps) {
+                                 const TxIdentifier& txid, Deps& deps) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
@@ -219,8 +217,7 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
 
 TxOpStatus KVBucket::Read(const std::string& key, Value& v,
                           const TxIdentifier& txid,
-                          std::function<void()> callback,
-                          std::vector<txindex::Dep>& deps) {
+                          std::function<void()> callback, Deps& deps) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;

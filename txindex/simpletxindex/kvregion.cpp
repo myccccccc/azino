@@ -33,8 +33,7 @@ KVRegion::~KVRegion() {
 }
 
 TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
-                               std::function<void()> callback,
-                               std::vector<txindex::Dep>& deps) {
+                               std::function<void()> callback, Deps& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].WriteLock(key, txid, callback, deps);
     DO_RW_DEP_REPORT(deps);
@@ -42,8 +41,7 @@ TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
 }
 
 TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
-                                 const TxIdentifier& txid,
-                                 std::vector<txindex::Dep>& deps) {
+                                 const TxIdentifier& txid, Deps& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, deps);
     DO_RW_DEP_REPORT(deps);
@@ -62,8 +60,7 @@ TxOpStatus KVRegion::Commit(const std::string& key, const TxIdentifier& txid) {
 
 TxOpStatus KVRegion::Read(const std::string& key, Value& v,
                           const TxIdentifier& txid,
-                          std::function<void()> callback,
-                          std::vector<txindex::Dep>& deps) {
+                          std::function<void()> callback, Deps& deps) {
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].Read(key, v, txid, callback, deps);
     DO_RW_DEP_REPORT(deps);

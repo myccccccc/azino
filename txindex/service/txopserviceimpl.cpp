@@ -18,7 +18,7 @@ void TxOpServiceImpl::WriteIntent(
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     std::string key = request->key();
-    std::vector<Dep> deps;
+    Deps deps;
 
     TxOpStatus* sts = new TxOpStatus(_index->WriteIntent(
         request->key(), request->value(), request->txid(), deps));
@@ -43,7 +43,7 @@ void TxOpServiceImpl::WriteLock(
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     std::string key = request->key();
-    std::vector<Dep> deps;
+    Deps deps;
 
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteLock(request->key(), request->txid(),
@@ -112,7 +112,7 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
 
     Value* v = new Value();
     std::string key = request->key();
-    std::vector<Dep> deps;
+    Deps deps;
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,

@@ -13,34 +13,37 @@ std::hash<uint64_t> hash;
     std::lock_guard<bthread::Mutex> lck1(p1->m, std::adopt_lock); \
     std::lock_guard<bthread::Mutex> lck2(p2->m, std::adopt_lock);
 
-#define LOCK3(p1, p2, p3)                                          \
-    if (p1->start_ts() < p2->start_ts() < p3->start_ts()) {        \
-        p1->m.lock();                                              \
-        p2->m.lock();                                              \
-        p3->m.lock();                                              \
-    } else if (p1->start_ts() < p3->start_ts() < p2->start_ts()) { \
-        p1->m.lock();                                              \
-        p3->m.lock();                                              \
-        p2->m.lock();                                              \
-    } else if (p2->start_ts() < p1->start_ts() < p3->start_ts()) { \
-        p2->m.lock();                                              \
-        p1->m.lock();                                              \
-        p3->m.lock();                                              \
-    } else if (p3->start_ts() < p1->start_ts() < p2->start_ts()) { \
-        p3->m.lock();                                              \
-        p1->m.lock();                                              \
-        p2->m.lock();                                              \
-    } else if (p2->start_ts() < p3->start_ts() < p1->start_ts()) { \
-        p2->m.lock();                                              \
-        p3->m.lock();                                              \
-        p1->m.lock();                                              \
-    } else {                                                       \
-        p3->m.lock();                                              \
-        p2->m.lock();                                              \
-        p1->m.lock();                                              \
-    }                                                              \
-    std::lock_guard<bthread::Mutex> lck1(p1->m, std::adopt_lock);  \
-    std::lock_guard<bthread::Mutex> lck2(p2->m, std::adopt_lock);  \
+#define LOCK3(p1, p2, p3)                                         \
+    auto ts1 = p1->start_ts();                                    \
+    auto ts2 = p2->start_ts();                                    \
+    auto ts3 = p3->start_ts();                                    \
+    if (ts1 < ts2 && ts2 < ts3) {                                 \
+        p1->m.lock();                                             \
+        p2->m.lock();                                             \
+        p3->m.lock();                                             \
+    } else if (ts1 < ts3 && ts3 < ts2) {                          \
+        p1->m.lock();                                             \
+        p3->m.lock();                                             \
+        p2->m.lock();                                             \
+    } else if (ts2 < ts1 && ts1 < ts3) {                          \
+        p2->m.lock();                                             \
+        p1->m.lock();                                             \
+        p3->m.lock();                                             \
+    } else if (ts3 < ts1 && ts1 < ts2) {                          \
+        p3->m.lock();                                             \
+        p1->m.lock();                                             \
+        p2->m.lock();                                             \
+    } else if (ts2 < ts3 && ts3 < ts1) {                          \
+        p2->m.lock();                                             \
+        p3->m.lock();                                             \
+        p1->m.lock();                                             \
+    } else {                                                      \
+        p3->m.lock();                                             \
+        p2->m.lock();                                             \
+        p1->m.lock();                                             \
+    }                                                             \
+    std::lock_guard<bthread::Mutex> lck1(p1->m, std::adopt_lock); \
+    std::lock_guard<bthread::Mutex> lck2(p2->m, std::adopt_lock); \
     std::lock_guard<bthread::Mutex> lck3(p3->m, std::adopt_lock);
 
 #define FINDABORTTXNONCONSECUTIVERWDEP(t1, t2, t3, res)            \
