@@ -11,8 +11,6 @@ message TxOpStatus {
     ReadBlock = 5;
     CleanNotExist = 6;
     CommitNotExist = 7;
-    ClearRepeat = 8;
-    NoneToPersist = 9;
   };
   optional Code error_code = 1 [default = Ok];
   optional string error_message = 2;

@@ -1,15 +1,11 @@
-#include <bthread/bthread.h>
 #include <bthread/mutex.h>
-#include <butil/containers/flat_map.h>
 #include <butil/hash.h>
 #include <gflags/gflags.h>
 
 #include <functional>
-#include <memory>
 #include <unordered_map>
 
 #include "index.h"
-#include "persistor.h"
 #include "reporter.h"
 
 // todo: need to consider the ltv in the storage
@@ -299,12 +295,9 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     return sts;
 }
 
-TxOpStatus KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas) {
+int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas) {
     std::lock_guard<bthread::Mutex> lck(_latch);
-
-    TxOpStatus sts;
-    std::stringstream ss;
-    unsigned long cnt = 0;
+    int cnt = 0;
     for (auto& it : _kvs) {
         if (it.second.Size() == 0) {
             continue;
@@ -315,54 +308,29 @@ TxOpStatus KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas) {
         cnt += it.second.MVV().size();
         datas.push_back(d);
     }
-    if (cnt == 0) {
-        sts.set_error_code(TxOpStatus_Code_NoneToPersist);
-    } else {
-        sts.set_error_code(TxOpStatus_Code_Ok);
-    }
-
-    ss << "Get data to persist. "
-       << "Persist key num: " << datas.size() << "Persist value num: " << cnt;
-    sts.set_error_message(ss.str());
-    LOG(INFO) << ss.str();
-    return sts;
+    return cnt;
 }
 
-TxOpStatus KVBucket::ClearPersisted(
-    const std::vector<txindex::DataToPersist>& datas) {
+int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
-    TxOpStatus sts;
-    std::stringstream ss;
-    unsigned long cnt = 0;
+    int cnt = 0;
     for (auto& it : datas) {
         assert(!it.t2vs.empty());
         if (_kvs.find(it.key) == _kvs.end()) {
-            sts.set_error_code(TxOpStatus_Code_ClearRepeat);
-            ss << "UserKey: " << it.key
-               << "repeat clear due to no key in _kvs.";
-            break;
+            LOG(ERROR) << "UserKey: " << it.key
+                       << " clear persist error due to no key in _kvs.";
         }
         auto n = _kvs[it.key].Truncate(it.t2vs.begin()->first);
         cnt += n;
         if (it.t2vs.size() != n) {
-            sts.set_error_code(TxOpStatus_Code_ClearRepeat);
-            ss << "UserKey: " << it.key
-               << "repeat clear due to truncate number not match.";
-            break;
+            LOG(ERROR)
+                << "UserKey: " << it.key
+                << " clear persist error due to truncate number not match.";
         }
     }
-    if (sts.error_code() == TxOpStatus_Code_Ok) {
-        ss << "Clear persisted data success. "
-           << "Clear persist key num: " << datas.size()
-           << "CLear persist value num: " << cnt;
-        sts.set_error_message(ss.str());
-        LOG(INFO) << ss.str();
-    } else {
-        sts.set_error_message(ss.str());
-        LOG(ERROR) << ss.str();
-    }
-    return sts;
+
+    return cnt;
 }
 }  // namespace txindex
 }  // namespace azino

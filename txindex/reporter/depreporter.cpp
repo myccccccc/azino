@@ -1,4 +1,6 @@
-#include "reporter.h"
+#include "index.h"
+
+DEFINE_bool(enable_dep_reporter, true, "enable dependency reporter");
 
 namespace azino {
 namespace txindex {
@@ -18,16 +20,15 @@ void HandleDepResponse(brpc::Controller* cntl, txplanner::DepResponse* resp) {
     }
 }
 
-DepReporter::DepReporter(const std::string& txplanner_addr) {
-    brpc::ChannelOptions option;
-    if (_channel.Init(txplanner_addr.c_str(), &option) != 0) {
-        LOG(ERROR) << "Fail to initialize channel";
-    }
-    _stub.reset(new txplanner::DependenceService_Stub(&_channel));
-}
+DepReporter::DepReporter(brpc::Channel* txplaner_channel)
+    : _stub(txplaner_channel) {}
 
-void DepReporter::ReadWriteReport(const std::string key,
-                                  const std::vector<Dep>& deps) {
+void DepReporter::AsyncReadWriteReport(const std::string& key,
+                                       const std::vector<Dep>& deps) {
+    if (deps.empty()) {
+        return;
+    }
+
     for (size_t i = 0; i < deps.size(); i++) {
         auto& t1 = deps[i].t1;
         auto& t2 = deps[i].t2;
@@ -46,7 +47,7 @@ void DepReporter::ReadWriteReport(const std::string key,
         txplanner::DepResponse* resp = new azino::txplanner::DepResponse();
         google::protobuf::Closure* done =
             brpc::NewCallback(&HandleDepResponse, cntl, resp);
-        _stub->RWDep(cntl, &req, resp, done);
+        _stub.RWDep(cntl, &req, resp, done);
     }
 }
 

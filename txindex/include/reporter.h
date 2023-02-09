@@ -9,6 +9,8 @@
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 
+DECLARE_bool(enable_dep_reporter);
+
 namespace azino {
 namespace txindex {
 enum DepType { READWRITE = 1 };
@@ -21,15 +23,15 @@ typedef struct Dep {
 
 class DepReporter {
    public:
-    DepReporter(const std::string& txplanner_addr);
+    DepReporter(brpc::Channel* txplaner_channel);
     DISALLOW_COPY_AND_ASSIGN(DepReporter);
     ~DepReporter() = default;
 
-    void ReadWriteReport(const std::string key, const std::vector<Dep>& deps);
+    void AsyncReadWriteReport(const std::string& key,
+                              const std::vector<Dep>& deps);
 
    private:
-    std::unique_ptr<txplanner::DependenceService_Stub> _stub;
-    brpc::Channel _channel;
+    txplanner::DependenceService_Stub _stub;
 };
 }  // namespace txindex
 }  // namespace azino

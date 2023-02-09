@@ -7,6 +7,7 @@
 
 #include "azino/kv.h"
 #include "gflags/gflags.h"
+#include "mvccvalue.h"
 #include "persistor.h"
 #include "reporter.h"
 #include "service/kv.pb.h"
@@ -16,19 +17,14 @@ DECLARE_int32(latch_bucket_num);
 
 namespace azino {
 namespace txindex {
-struct DataToPersist;
+class KVRegion;
 
 class TxIndex {
    public:
-    // return the default index impl
-    static TxIndex* DefaultTxIndex(const std::string& storage_addr);
-
+    TxIndex(brpc::Channel* storage_channel, brpc::Channel* txplaner_channel);
     TxIndex() = default;
-
-    TxIndex(const TxIndex&) = delete;
-    TxIndex& operator=(const TxIndex&) = delete;
-
     virtual ~TxIndex() = default;
+    DISALLOW_ASSIGN(TxIndex);
 
     // This is an atomic read-write operation for one user_key, only used in
     // pessimistic transactions. Success when no newer version of this key,
@@ -36,7 +32,7 @@ class TxIndex {
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
                                  std::function<void()> callback,
-                                 std::vector<Dep>& deps) = 0;
+                                 std::vector<Dep>& deps);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when no newer version of
@@ -44,19 +40,17 @@ class TxIndex {
     // intent or lock, and change lock to intent at the same time.
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
                                    const TxIdentifier& txid,
-                                   std::vector<Dep>& deps) = 0;
+                                   std::vector<Dep>& deps);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when it finds and cleans
     // this tx's intent or lock for this key
-    virtual TxOpStatus Clean(const std::string& key,
-                             const TxIdentifier& txid) = 0;
+    virtual TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when it finds and commit
     // this tx's intent for this key
-    virtual TxOpStatus Commit(const std::string& key,
-                              const TxIdentifier& txid) = 0;
+    virtual TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
 
     // Current implementation uses snapshot isolation.
     // read will be blocked if there exists and intent who has a smaller ts than
@@ -65,66 +59,12 @@ class TxIndex {
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
                             std::function<void()> callback,
-                            std::vector<Dep>& deps) = 0;
-
-    virtual TxOpStatus GetPersisting(std::vector<DataToPersist>& datas) = 0;
-
-    virtual TxOpStatus ClearPersisted(
-        const std::vector<DataToPersist>& datas) = 0;
-};
-
-typedef std::shared_ptr<Value> ValuePtr;
-typedef struct TxIdentifierCmp {
-    bool operator()(const TxIdentifier& lhs, const TxIdentifier& rhs) const {
-        return lhs.commit_ts() > rhs.commit_ts();
-    }
-} TxIdentifierCmp;
-typedef std::map<TxIdentifier, ValuePtr, TxIdentifierCmp> MultiVersionValue;
-typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
-
-class MVCCValue {
-   public:
-    MVCCValue() : _has_lock(false), _has_intent(false), _holder(), _mvv() {}
-    DISALLOW_COPY_AND_ASSIGN(MVCCValue);
-    ~MVCCValue() = default;
-    inline bool HasLock() const { return _has_lock; }
-    inline bool HasIntent() const { return _has_intent; }
-    inline TxIdentifier Holder() const { return _holder; }
-    inline txindex::ValuePtr IntentValue() const { return _intent_value; }
-    inline size_t Size() const { return _mvv.size(); }
-    void Lock(const TxIdentifier& txid);
-    void Prewrite(const Value& v, const TxIdentifier& txid);
-    void Clean();
-    void Commit(const TxIdentifier& txid);
-    inline MultiVersionValue& MVV() { return _mvv; }
-
-    MultiVersionValue::const_iterator LargestTSValue() const;
-
-    // Finds committed values whose timestamp is smaller or equal than "ts"
-    MultiVersionValue::const_iterator Seek(TimeStamp ts) const;
-
-    // Truncate committed values whose timestamp is smaller or equal than "ts",
-    // return the number of values truncated
-    unsigned Truncate(const TxIdentifier& txid);
-
-    inline void AddReader(const TxIdentifier& txid) {
-        _readers.insert(std::make_pair(txid.start_ts(), txid));
-    }
-    inline ReaderMap& Readers() { return _readers; }
-
-    inline void AddWaiter(const std::function<void()>& fn) {
-        _waiters.push_back(fn);
-    }
-    void WakeUpWaiters();
+                            std::vector<Dep>& deps);
 
    private:
-    bool _has_lock;
-    bool _has_intent;
-    TxIdentifier _holder;
-    ValuePtr _intent_value;
-    MultiVersionValue _mvv;
-    ReaderMap _readers;
-    std::vector<std::function<void()>> _waiters;
+    brpc::Channel* _storage_channel;
+    brpc::Channel* _txplaner_channel;
+    std::unique_ptr<KVRegion> _region;
 };
 
 class KVBucket : public txindex::TxIndex {
@@ -148,21 +88,19 @@ class KVBucket : public txindex::TxIndex {
                             const TxIdentifier& txid,
                             std::function<void()> callback,
                             std::vector<txindex::Dep>& deps) override;
-    virtual TxOpStatus GetPersisting(
-        std::vector<txindex::DataToPersist>& datas) override;
-    virtual TxOpStatus ClearPersisted(
-        const std::vector<txindex::DataToPersist>& datas) override;
+    int GetPersisting(std::vector<txindex::DataToPersist>& datas);
+    int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
 
    private:
     std::unordered_map<std::string, MVCCValue> _kvs;
     bthread::Mutex _latch;
 };
 
-class TxIndexImpl : public txindex::TxIndex {
+class KVRegion : public txindex::TxIndex {
    public:
-    TxIndexImpl(const std::string& storage_addr);
-    DISALLOW_COPY_AND_ASSIGN(TxIndexImpl);
-    ~TxIndexImpl();
+    KVRegion(brpc::Channel* storage_channel, brpc::Channel* txplaner_channel);
+    DISALLOW_COPY_AND_ASSIGN(KVRegion);
+    ~KVRegion();
 
     virtual TxOpStatus WriteLock(const std::string& key,
                                  const TxIdentifier& txid,
@@ -170,27 +108,23 @@ class TxIndexImpl : public txindex::TxIndex {
                                  std::vector<txindex::Dep>& deps) override;
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
                                    const TxIdentifier& txid,
-                                   std::vector<txindex::Dep>& deps);
-    virtual TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
-    virtual TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
+                                   std::vector<txindex::Dep>& deps) override;
+    virtual TxOpStatus Clean(const std::string& key,
+                             const TxIdentifier& txid) override;
+    virtual TxOpStatus Commit(const std::string& key,
+                              const TxIdentifier& txid) override;
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
                             std::function<void()> callback,
-                            std::vector<txindex::Dep>& deps);
-    virtual TxOpStatus GetPersisting(
-        std::vector<txindex::DataToPersist>& datas);
-    virtual TxOpStatus ClearPersisted(
-        const std::vector<txindex::DataToPersist>& datas);
+                            std::vector<txindex::Dep>& deps) override;
+
+    inline std::vector<KVBucket>& KVBuckets() { return _kvbs; }
 
    private:
+    friend class Persistor;
     std::vector<KVBucket> _kvbs;
-    txindex::Persistor _persistor;
-    uint32_t _last_persist_bucket_num;
-};
-
-struct DataToPersist {
-    std::string key;
-    MultiVersionValue t2vs;
+    Persistor _persistor;
+    DepReporter _deprpt;
 };
 
 }  // namespace txindex

@@ -8,9 +8,7 @@ DEFINE_int32(gc_period_ms, 1000, "gc period time");
 
 namespace azino {
 namespace txplanner {
-GC::GC(TxIDTable *table) : _table(table) {
-    fn = GC::execute;
-}
+GC::GC(TxIDTable *table) : _table(table) { fn = GC::execute; }
 
 void *GC::execute(void *args) {
     auto p = reinterpret_cast<GC *>(args);

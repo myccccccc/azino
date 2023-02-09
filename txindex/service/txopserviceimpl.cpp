@@ -6,10 +6,7 @@
 
 namespace azino {
 namespace txindex {
-TxOpServiceImpl::TxOpServiceImpl(const std::string& storage_addr,
-                                 const std::string& txplanner_addr)
-    : _index(TxIndex::DefaultTxIndex(storage_addr)),
-      _deprpt(new DepReporter(txplanner_addr)) {}
+TxOpServiceImpl::TxOpServiceImpl(TxIndex* index) : _index(index) {}
 TxOpServiceImpl::~TxOpServiceImpl() = default;
 
 void TxOpServiceImpl::WriteIntent(
@@ -35,9 +32,6 @@ void TxOpServiceImpl::WriteIntent(
               << " error message: " << sts->error_message();
 
     response->set_allocated_tx_op_status(sts);
-    done_guard.release()->Run();
-
-    _deprpt->ReadWriteReport(key, deps);
 }
 
 void TxOpServiceImpl::WriteLock(
@@ -69,9 +63,6 @@ void TxOpServiceImpl::WriteLock(
         return;
     }
     response->set_allocated_tx_op_status(sts);
-    done_guard.release()->Run();
-
-    _deprpt->ReadWriteReport(key, deps);
 }
 
 void TxOpServiceImpl::Clean(::google::protobuf::RpcController* controller,
@@ -142,9 +133,6 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
     }
     response->set_allocated_tx_op_status(sts);
     response->set_allocated_value(v);
-    done_guard.release()->Run();
-
-    _deprpt->ReadWriteReport(key, deps);
 }
 }  // namespace txindex
 }  // namespace azino
