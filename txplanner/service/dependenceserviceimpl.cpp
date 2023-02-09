@@ -7,14 +7,14 @@
 namespace azino {
 namespace txplanner {
 
-DependenceServiceImpl::DependenceServiceImpl(TxIDTable* tt) : _tt(tt) {}
+RegionServiceImpl::RegionServiceImpl(TxIDTable* tt) : _tt(tt) {}
 
-DependenceServiceImpl::~DependenceServiceImpl() {}
+RegionServiceImpl::~RegionServiceImpl() {}
 
-void DependenceServiceImpl::RWDep(::google::protobuf::RpcController* controller,
-                                  const ::azino::txplanner::DepRequest* request,
-                                  ::azino::txplanner::DepResponse* response,
-                                  ::google::protobuf::Closure* done) {
+void RegionServiceImpl::RWDep(::google::protobuf::RpcController* controller,
+                              const ::azino::txplanner::DepRequest* request,
+                              ::azino::txplanner::DepResponse* response,
+                              ::google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 

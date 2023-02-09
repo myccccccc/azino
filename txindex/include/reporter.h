@@ -36,7 +36,7 @@ class DepReporter {
    private:
     static int execute(void* args, bthread::TaskIterator<Deps>& iter);
 
-    txplanner::DependenceService_Stub _stub;
+    txplanner::RegionService_Stub _stub;
     bthread::ExecutionQueueId<Deps> _deps_queue;
 };
 

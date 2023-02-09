@@ -61,6 +61,6 @@ message DepResponse {
   optional uint64 error_code = 1;
 }
 
-service DependenceService {
+service RegionService {
   rpc RWDep(DepRequest) returns (DepResponse);
 }

@@ -41,9 +41,9 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    azino::txplanner::DependenceServiceImpl dep_service_impl(&tt);
-    if (server.AddService(&dep_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
-        0) {
+    azino::txplanner::RegionServiceImpl region_service_impl(&tt);
+    if (server.AddService(&region_service_impl,
+                          brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(FATAL) << "Fail to add dep_service_impl";
         return -1;
     }

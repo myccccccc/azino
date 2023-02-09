@@ -46,10 +46,10 @@ class TxServiceImpl : public TxService {
     std::string _storage_addr;  // storage addresses in form of "0.0.0.0:8000"
 };
 
-class DependenceServiceImpl : public DependenceService {
+class RegionServiceImpl : public RegionService {
    public:
-    DependenceServiceImpl(TxIDTable* tt);
-    ~DependenceServiceImpl();
+    RegionServiceImpl(TxIDTable* tt);
+    ~RegionServiceImpl();
 
     virtual void RWDep(::google::protobuf::RpcController* controller,
                        const ::azino::txplanner::DepRequest* request,
