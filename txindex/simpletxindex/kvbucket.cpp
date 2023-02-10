@@ -8,21 +8,21 @@
 #include "index.h"
 #include "reporter.h"
 
-#define CHECK_WRITE_TOO_LATE(type)                                        \
-    do {                                                                  \
-        auto iter = mv.LargestTSValue();                                  \
-        if (iter != mv.MVV().end() &&                                     \
-            iter->first.commit_ts() >= txid.start_ts()) {                 \
-            ss << "Tx(" << txid.ShortDebugString() << ") write " << #type \
-               << " on "                                                  \
-               << "key: " << key << " too late. "                         \
-               << "Find "                                                 \
-               << "largest version: " << iter->first.ShortDebugString()   \
-               << " value: " << iter->second->ShortDebugString();         \
-            sts.set_error_code(TxOpStatus_Code_WriteTooLate);             \
-            sts.set_error_message(ss.str());                              \
-            return sts;                                                   \
-        }                                                                 \
+#define CHECK_WRITE_TOO_LATE(type)                                       \
+    do {                                                                 \
+        auto iter = mv.LargestTSValue();                                 \
+        if (iter != mv.MVV().end() &&                                    \
+            iter->first.commit_ts() >= txid.start_ts()) {                \
+            ss << "Tx(" << txid.ShortDebugString() << ") write " << type \
+               << " on "                                                 \
+               << "key: " << key << " too late. "                        \
+               << "Find "                                                \
+               << "largest version: " << iter->first.ShortDebugString()  \
+               << " value: " << iter->second->ShortDebugString();        \
+            sts.set_error_code(TxOpStatus_Code_WriteTooLate);            \
+            sts.set_error_message(ss.str());                             \
+            return sts;                                                  \
+        }                                                                \
     } while (0);
 
 #define CHECK_READ_WRITE_DEP(key, mv, txid, deps)                          \
@@ -39,89 +39,14 @@ namespace txindex {
 
 TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
                                std::function<void()> callback, Deps& deps) {
-    std::lock_guard<bthread::Mutex> lck(_latch);
-
-    TxOpStatus sts;
-    std::stringstream ss;
-    MVCCValue& mv = _kvs[key];
-
-    CHECK_WRITE_TOO_LATE(lock)
-
-    if (mv.LockType() != MVCCLock::None) {
-        if (txid.start_ts() != mv.LockHolder().start_ts()) {
-            ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
-               << "key: " << key << " blocked. "
-               << "Find lock type: " << mv.LockType()
-               << " Tx: " << mv.LockHolder().ShortDebugString();
-            sts.set_error_code(TxOpStatus_Code_WriteBlock);
-            sts.set_error_message(ss.str());
-            mv.AddWaiter(callback);
-            LOG(INFO) << ss.str();
-            return sts;
-        }
-
-        ss << "Tx(" << txid.ShortDebugString() << ") write lock on "
-           << "key: " << key << " repeated. "
-           << "Find lock type: " << mv.LockType()
-           << " Tx: " << mv.LockHolder().ShortDebugString();
-        sts.set_error_code(TxOpStatus_Code_Ok);
-        sts.set_error_message(ss.str());
-        LOG(WARNING) << ss.str();
-        return sts;
-    }
-
-    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
-
-    mv.Lock(txid);
-
-    sts.set_error_code(TxOpStatus_Code_Ok);
-    return sts;
+    return Write(MVCCLock::WriteLock, txid, key, Value::default_instance(),
+                 callback, deps);
 }
 
 TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
-                                 const TxIdentifier& txid, Deps& deps) {
-    std::lock_guard<bthread::Mutex> lck(_latch);
-
-    TxOpStatus sts;
-    std::stringstream ss;
-    MVCCValue& mv = _kvs[key];
-
-    CHECK_WRITE_TOO_LATE(intent)
-
-    if (mv.LockType() != MVCCLock::None) {
-        if (txid.start_ts() != mv.LockHolder().start_ts()) {
-            ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
-               << "key: " << key << " conflict. "
-               << "Find lock type: " << mv.LockType()
-               << " Tx: " << mv.LockHolder().ShortDebugString();
-            sts.set_error_code(TxOpStatus_Code_WriteConflicts);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
-            return sts;
-        }
-
-        if (mv.LockType() == MVCCLock::WriteIntent) {
-            ss << "Tx(" << txid.ShortDebugString() << ") write intent on "
-               << "key: " << key << " repeated. "
-               << "Find lock type: " << mv.LockType()
-               << " Tx: " << mv.LockHolder().ShortDebugString();
-            sts.set_error_code(TxOpStatus_Code_Ok);
-            sts.set_error_message(ss.str());
-            LOG(WARNING) << ss.str();
-            return sts;
-        } else {
-            // change write_lock to write_intent
-            // go down
-            ;
-        }
-    }
-
-    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
-
-    mv.Prewrite(v, txid);
-
-    sts.set_error_code(TxOpStatus_Code_Ok);
-    return sts;
+                                 const TxIdentifier& txid,
+                                 std::function<void()> callback, Deps& deps) {
+    return Write(MVCCLock::WriteIntent, txid, key, v, callback, deps);
 }
 
 TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
@@ -272,6 +197,63 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
     }
 
     return cnt;
+}
+
+TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
+                           const std::string& key, const Value& v,
+                           std::function<void()> callback, Deps& deps) {
+    std::lock_guard<bthread::Mutex> lck(_latch);
+    TxOpStatus sts;
+    std::stringstream ss;
+    MVCCValue& mv = _kvs[key];
+
+    CHECK_WRITE_TOO_LATE(lock_type)
+
+    if (mv.LockType() != MVCCLock::None) {
+        ss << "Tx(" << txid.ShortDebugString() << ") write " << lock_type
+           << " on "
+           << "key: " << key << " find lock type: " << mv.LockType() << " Tx("
+           << mv.LockHolder().ShortDebugString() << ")";
+        if (mv.LockHolder().start_ts() < txid.start_ts()) {
+            mv.AddWaiter(callback);
+            ss << " blocked";
+            sts.set_error_code(TxOpStatus_Code_WriteBlock);
+            sts.set_error_message(ss.str());
+            LOG(INFO) << ss.str();
+            return sts;
+        } else if (mv.LockHolder().start_ts() > txid.start_ts()) {
+            ss << " conflict";
+            sts.set_error_code(TxOpStatus_Code_WriteConflicts);
+            sts.set_error_message(ss.str());
+            LOG(INFO) << ss.str();
+            return sts;
+        } else if (mv.LockType() == lock_type) {
+            ss << " repeated";
+            sts.set_error_code(TxOpStatus_Code_Ok);
+            sts.set_error_message(ss.str());
+            LOG(WARNING) << ss.str();
+            return sts;
+        }
+
+        // change write_lock to write_intent
+        // go down
+    }
+
+    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
+
+    switch (lock_type) {
+        case MVCCLock::WriteIntent:
+            mv.Prewrite(v, txid);
+            break;
+        case MVCCLock::WriteLock:
+            mv.Lock(txid);
+            break;
+        default:
+            assert(0);
+    }
+
+    sts.set_error_code(TxOpStatus_Code_Ok);
+    return sts;
 }
 }  // namespace txindex
 }  // namespace azino

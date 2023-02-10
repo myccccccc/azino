@@ -19,7 +19,9 @@ void TxOpServiceImpl::WriteIntent(
     std::string key = request->key();
 
     TxOpStatus* sts = new TxOpStatus(
-        _index->WriteIntent(request->key(), request->value(), request->txid()));
+        _index->WriteIntent(request->key(), request->value(), request->txid(),
+                            std::bind(&TxOpServiceImpl::WriteIntent, this,
+                                      controller, request, response, done)));
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString()
@@ -29,6 +31,11 @@ void TxOpServiceImpl::WriteIntent(
               << " error code: " << sts->error_code()
               << " error message: " << sts->error_message();
 
+    if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
+        done_guard.release();
+        delete sts;
+        return;
+    }
     response->set_allocated_tx_op_status(sts);
 }
 

@@ -14,8 +14,9 @@ TxOpStatus TxIndex::WriteLock(const std::string &key, const TxIdentifier &txid,
 }
 
 TxOpStatus TxIndex::WriteIntent(const std::string &key, const Value &value,
-                                const TxIdentifier &txid) {
-    return _region->WriteIntent(key, value, txid);
+                                const TxIdentifier &txid,
+                                std::function<void()> callback) {
+    return _region->WriteIntent(key, value, txid, callback);
 }
 
 TxOpStatus TxIndex::Clean(const std::string &key, const TxIdentifier &txid) {
