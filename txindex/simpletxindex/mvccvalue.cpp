@@ -13,26 +13,23 @@ namespace azino {
 namespace txindex {
 
 void MVCCValue::Lock(const TxIdentifier& txid) {
-    _has_lock = true;
-    _holder.CopyFrom(txid);
+    _lock = MVCCLock::WriteLock;
+    _lock_holder.CopyFrom(txid);
 }
 void MVCCValue::Prewrite(const Value& v, const TxIdentifier& txid) {
-    _has_lock = false;
-    _has_intent = true;
-    _holder.CopyFrom(txid);
-    _intent_value.reset(new Value(v));
+    _lock = MVCCLock::WriteIntent;
+    _lock_holder.CopyFrom(txid);
+    _lock_value.reset(new Value(v));
 }
 void MVCCValue::Clean() {
-    _holder.Clear();
-    _intent_value.reset();
-    _has_intent = false;
-    _has_lock = false;
+    _lock = MVCCLock::None;
+    _lock_holder.Clear();
+    _lock_value.reset();
 }
 void MVCCValue::Commit(const TxIdentifier& txid) {
-    _holder.Clear();
-    _mvv.insert(std::make_pair(txid, std::move(_intent_value)));
-    _has_intent = false;
-    _has_lock = false;
+    _lock = MVCCLock::None;
+    _lock_holder.Clear();
+    _mvv.insert(std::make_pair(txid, std::move(_lock_value)));
 }
 
 MultiVersionValue::const_iterator MVCCValue::LargestTSValue() const {

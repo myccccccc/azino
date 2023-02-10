@@ -23,15 +23,21 @@ typedef struct TxIdentifierCmp {
 typedef std::map<TxIdentifier, ValuePtr, TxIdentifierCmp> MultiVersionValue;
 typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
 
+enum MVCCLock {
+    None = 0,
+    WriteLock = 1,
+    WriteIntent = 2,
+};
+
 class MVCCValue {
    public:
-    MVCCValue() : _has_lock(false), _has_intent(false), _holder(), _mvv() {}
+    MVCCValue()
+        : _lock(MVCCLock::None), _lock_holder(), _lock_value(), _mvv() {}
     DISALLOW_COPY_AND_ASSIGN(MVCCValue);
     ~MVCCValue() = default;
-    inline bool HasLock() const { return _has_lock; }
-    inline bool HasIntent() const { return _has_intent; }
-    inline TxIdentifier Holder() const { return _holder; }
-    inline txindex::ValuePtr IntentValue() const { return _intent_value; }
+    inline MVCCLock LockType() const { return _lock; }
+    inline TxIdentifier LockHolder() const { return _lock_holder; }
+    inline txindex::ValuePtr IntentValue() const { return _lock_value; }
     inline size_t Size() const { return _mvv.size(); }
     void Lock(const TxIdentifier& txid);
     void Prewrite(const Value& v, const TxIdentifier& txid);
@@ -61,10 +67,9 @@ class MVCCValue {
     void WakeUpWaiters();
 
    private:
-    bool _has_lock;
-    bool _has_intent;
-    TxIdentifier _holder;
-    ValuePtr _intent_value;
+    MVCCLock _lock;
+    TxIdentifier _lock_holder;
+    ValuePtr _lock_value;
     MultiVersionValue _mvv;
     ReaderMap _readers;
     std::vector<std::function<void()>> _waiters;
