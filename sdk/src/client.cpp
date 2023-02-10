@@ -27,7 +27,7 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
     LOG(INFO) << " Sdk: " << cntl.local_side() << " " << #msg << ": "         \
               << cntl.remote_side() << " request: " << req.ShortDebugString() \
               << " response: " << resp.ShortDebugString()                     \
-              << " latency= " << cntl.latency_us() << "us";
+              << " latency= " << cntl.latency_us() << "us" << std::endl;
 
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
@@ -71,17 +71,17 @@ Status Transaction::Begin() {
     LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
     if (!resp.has_storage_addr()) {
         ss << " Missing storage addr";
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
     if (resp.txindex_addrs_size() == 0) {
         ss << " Missing txindex addrs";
-        return Status::NotSupportedErr(ss.str());
+        return Status::TxPlannerErr(ss.str());
     }
 
     auto* channel = new brpc::Channel();
@@ -110,22 +110,33 @@ Status Transaction::Commit() {
     std::stringstream ss;
     Status preput_sts = Status::Ok();
     Status commit_sts = Status::Ok();
+    Status abort_sts = Status::Ok();
+    azino::txplanner::TxService_Stub stub(_txplanner.get());
+    brpc::Controller cntl;
+    azino::txplanner::CommitTxRequest req;
+    azino::txplanner::CommitTxResponse resp;
+    azino::txplanner::AbortTxRequest areq;
+    azino::txplanner::AbortTxResponse aresp;
     if (!_txid) {
         ss << " Transaction has not began. ";
         return Status::IllegalTxOp(ss.str());
     }
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Transaction is not allowed to commit. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
 
-    // todo: commit op should be issused after preputAll ok
-    azino::txplanner::TxService_Stub stub(_txplanner.get());
-    brpc::Controller cntl;
-    azino::txplanner::CommitTxRequest req;
+    auto txid_sts = _txid->release_status();
+    txid_sts->set_status_code(TxStatus_Code_Preput);
+    _txid->set_allocated_status(txid_sts);
+
+    preput_sts = PreputAll();
+    if (!preput_sts.IsOk()) {
+        goto abort;
+    }
+
     req.set_allocated_txid(new TxIdentifier(*_txid));
-    azino::txplanner::CommitTxResponse resp;
     stub.CommitTx(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
         LOG_CONTROLLER_ERROR(cntl, ss)
@@ -135,23 +146,17 @@ Status Transaction::Commit() {
     LOG_SDK(cntl, req, resp, CommitTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
-    if (_txid->status().status_code() != TxStatus_Code_Preputting) {
-        ss << " Wrong tx status code: " << _txid->status().status_code();
-        return Status::NotSupportedErr(ss.str());
-    }
-
-    auto txid_sts = _txid->release_status();
+    txid_sts = _txid->release_status();
     _txid->set_allocated_status(txid_sts);
-
-    preput_sts = PreputAll();
-    if (!preput_sts.IsOk()) {
+    if (_txid->status().status_code() != TxStatus_Code_Commit) {
+        ss << " Wrong tx status code when commit: "
+           << _txid->ShortDebugString();
+        preput_sts = Status::TxPlannerErr(ss.str());
         goto abort;
     }
 
-    txid_sts->set_status_code(TxStatus_Code_Committing);
     commit_sts = CommitAll();
     if (commit_sts.IsOk()) {
-        txid_sts->set_status_code(TxStatus_Code_Committed);
         txid_sts->set_status_message(commit_sts.ToString());
         return commit_sts;
     } else {
@@ -161,10 +166,28 @@ Status Transaction::Commit() {
     }
 
 abort:
-    txid_sts->set_status_code(TxStatus_Code_Aborting);
-    Status abort_sts = AbortAll();
+    if (_txid->status().status_code() != TxStatus_Code_Abort) {
+        areq.set_allocated_txid(new TxIdentifier(*_txid));
+        stub.AbortTx(&cntl, &areq, &aresp, nullptr);
+        if (cntl.Failed()) {
+            LOG_CONTROLLER_ERROR(cntl, ss)
+            return Status::NetworkErr(ss.str());
+        }
+
+        LOG_SDK(cntl, areq, aresp, AbortTx_from_txplanner)
+
+        _txid.reset(aresp.release_txid());
+    }
+
+    txid_sts = _txid->release_status();
+    _txid->set_allocated_status(txid_sts);
+    if (_txid->status().status_code() != TxStatus_Code_Abort) {
+        ss << " Wrong tx status code when abort: " << _txid->ShortDebugString();
+        return Status::TxPlannerErr(ss.str());
+    }
+
+    abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
-        txid_sts->set_status_code(TxStatus_Code_Aborted);
         txid_sts->set_status_message(preput_sts.ToString());
         return preput_sts;
     } else {
@@ -320,15 +343,15 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
         ss << " Transaction has not began.";
         return Status::IllegalTxOp(ss.str());
     }
-    if (_txid->status().status_code() != TxStatus_Code_Started) {
+    if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Transaction is not allowed to put. "
            << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
 
     auto iter = _txwritebuffer->find(key);
-    if ((iter == _txwritebuffer->end()) ||
-        (options.type == kPessimistic &&
+    if (options.type == kPessimistic &&
+        (iter == _txwritebuffer->end() ||
          iter->second.status != TxWriteStatus::LOCKED)) {
         // Pessimistic
 
@@ -352,19 +375,21 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
 
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
+                _txwritebuffer->Upsert(options, key, is_delete, value);
+                iter = _txwritebuffer->find(key);
                 iter->second.status = TxWriteStatus::LOCKED;
                 break;
             default:
                 // todo: fail to lock, may use some optimistic approach
-                ss << " Lock key: " << iter->first
-                   << " value: " << iter->second.value.ShortDebugString()
+                ss << " Lock key: " << key << " value: " << value
+                   << " is_delete: " << is_delete
                    << " error code: " << resp.tx_op_status().error_code()
                    << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());
         }
+    } else {
+        _txwritebuffer->Upsert(options, key, is_delete, value);
     }
-
-    _txwritebuffer->Upsert(options, key, is_delete, value);
 
     return Status::Ok();
 }

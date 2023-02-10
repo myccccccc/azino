@@ -11,8 +11,6 @@ message TxOpStatus {
     ReadBlock = 5;
     CleanNotExist = 6;
     CommitNotExist = 7;
-    ClearRepeat = 8;
-    NoneToPersist = 9;
   };
   optional Code error_code = 1 [default = Ok];
   optional string error_message = 2;
@@ -21,13 +19,11 @@ message TxOpStatus {
 message TxStatus {
   enum Code {
    UnInitialize = 0;
-   Started = 1;
-   Preputting = 2;
-   Committing = 3;
-   Committed = 4;
-   Aborting = 5;
-   Aborted = 6;
-   Abnormal = 7;
+   Start = 1;
+   Preput = 2;
+   Abort = 3;
+   Commit = 4;
+   Abnormal = 5;
   };
   optional Code status_code = 1 [default = UnInitialize];
   optional string status_message = 2;

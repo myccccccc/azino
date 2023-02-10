@@ -5,8 +5,7 @@
 
 namespace azino {
 namespace txindex {
-TxOpServiceImpl::TxOpServiceImpl(const std::string& storage_addr)
-    : _index(TxIndex::DefaultTxIndex(storage_addr)) {}
+TxOpServiceImpl::TxOpServiceImpl(TxIndex* index) : _index(index) {}
 TxOpServiceImpl::~TxOpServiceImpl() = default;
 
 void TxOpServiceImpl::WriteIntent(
@@ -16,6 +15,8 @@ void TxOpServiceImpl::WriteIntent(
     ::google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
+    std::string key = request->key();
 
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteIntent(request->key(), request->value(), request->txid()));
@@ -39,6 +40,8 @@ void TxOpServiceImpl::WriteLock(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    std::string key = request->key();
+
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteLock(request->key(), request->txid(),
                           std::bind(&TxOpServiceImpl::WriteLock, this,
@@ -53,9 +56,9 @@ void TxOpServiceImpl::WriteLock(
     if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
         done_guard.release();
         delete sts;
-    } else {
-        response->set_allocated_tx_op_status(sts);
+        return;
     }
+    response->set_allocated_tx_op_status(sts);
 }
 
 void TxOpServiceImpl::Clean(::google::protobuf::RpcController* controller,
@@ -104,6 +107,7 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     Value* v = new Value();
+    std::string key = request->key();
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,
@@ -119,10 +123,10 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
         done_guard.release();
         delete sts;
         delete v;
-    } else {
-        response->set_allocated_tx_op_status(sts);
-        response->set_allocated_value(v);
+        return;
     }
+    response->set_allocated_tx_op_status(sts);
+    response->set_allocated_value(v);
 }
 }  // namespace txindex
 }  // namespace azino
