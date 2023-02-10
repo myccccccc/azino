@@ -78,7 +78,8 @@ class KVBucket {
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
                     std::function<void()> callback, Deps& deps);
-    int GetPersisting(std::vector<txindex::DataToPersist>& datas);
+    int GetPersisting(std::vector<txindex::DataToPersist>& datas,
+                      uint64_t min_ats);
     int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
 
    private:

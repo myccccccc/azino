@@ -61,6 +61,15 @@ message DepResponse {
   optional uint64 error_code = 1;
 }
 
+message GetMinATSRequest {
+
+}
+
+message GetMinATSResponse {
+  optional uint64 min_ats = 1;
+}
+
 service RegionService {
   rpc RWDep(DepRequest) returns (DepResponse);
+  rpc GetMinATS(GetMinATSRequest) returns (GetMinATSResponse);
 }

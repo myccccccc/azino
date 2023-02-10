@@ -186,7 +186,7 @@ void TxIDTable::del_active_tx(TxIDPtr p) {
         _min_ats = (*_active_tx.begin())->start_ts();
         _max_ats = (*_active_tx.rbegin())->start_ts();
     } else {
-        _min_ats = MAX_TIMESTAMP;
+        _min_ats = (*_done_tx.rbegin())->start_ts() + 1;
         _max_ats = MIN_TIMESTAMP;
     }
 
@@ -233,6 +233,12 @@ TxIDTable::TxIDTable() : gc(this) {
 }
 
 TxIDTable::~TxIDTable() { gc.Stop(); }
+
+TimeStamp TxIDTable::GetMinATS() {
+    std::lock_guard<bthread::Mutex> lck(_lock);
+
+    return _max_ats;
+}
 
 }  // namespace txplanner
 }  // namespace azino

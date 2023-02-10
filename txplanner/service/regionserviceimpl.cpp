@@ -52,5 +52,16 @@ void RegionServiceImpl::RWDep(::google::protobuf::RpcController* controller,
     }
 }
 
+void RegionServiceImpl::GetMinATS(
+    ::google::protobuf::RpcController* controller,
+    const ::azino::txplanner::GetMinATSRequest* request,
+    ::azino::txplanner::GetMinATSResponse* response,
+    ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard done_guard(done);
+    //    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
+    response->set_min_ats(_tt->GetMinATS());
+}
+
 }  // namespace txplanner
 }  // namespace azino

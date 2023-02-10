@@ -1,3 +1,5 @@
+#include "persistor.h"
+
 #include <gflags/gflags.h>
 
 #include "index.h"
@@ -5,6 +7,7 @@
 DEFINE_bool(enable_persistor, true,
             "enable persistor to persist data to storage server");
 DEFINE_int32(persist_period_ms, 100, "persist period time");
+DEFINE_int32(getminats_period_s, 2, "get min_ats period time");
 
 namespace azino {
 namespace txindex {
@@ -13,7 +16,10 @@ Persistor::Persistor(KVRegion *region, brpc::Channel *storage_channel,
                      brpc::Channel *txplaner_channel)
     : _region(region),
       _storage_stub(storage_channel),
-      _last_persist_bucket_num(0) {
+      _txplanner_stub(txplaner_channel),
+      _last_persist_bucket_num(0),
+      _last_get_min_ats_time(0),
+      _min_ats(0) {
     fn = Persistor::execute;
 }
 
@@ -27,6 +33,7 @@ void *Persistor::execute(void *args) {
                 break;
             }
         }
+        p->get_min_ats();
         p->persist();
     }
     return nullptr;
@@ -40,7 +47,8 @@ void Persistor::persist() {
 
     size_t persist_bucket_num =
         (_last_persist_bucket_num + 1) % _region->KVBuckets().size();
-    auto cnt = _region->KVBuckets()[persist_bucket_num].GetPersisting(datas);
+    auto cnt =
+        _region->KVBuckets()[persist_bucket_num].GetPersisting(datas, _min_ats);
     if (cnt == 0) {
         goto out;
     }
@@ -48,7 +56,7 @@ void Persistor::persist() {
     LOG(INFO) << "get data to persist, region:"
               << " bucket:" << persist_bucket_num
               << " persist key num:" << datas.size()
-              << " persist value num:" << cnt;
+              << " persist value num:" << cnt << " min_ats:" << _min_ats;
 
     for (auto &kv : datas) {
         for (auto &tv : kv.t2vs) {
@@ -76,6 +84,27 @@ void Persistor::persist() {
 out:
     _last_persist_bucket_num = persist_bucket_num;
     return;
+}
+
+void Persistor::get_min_ats() {
+    if (butil::gettimeofday_s() - _last_get_min_ats_time <
+        FLAGS_getminats_period_s) {
+        return;
+    }
+    _last_get_min_ats_time = butil::gettimeofday_s();
+    brpc::Controller cntl;
+    azino::txplanner::GetMinATSRequest req;
+    azino::txplanner::GetMinATSResponse resp;
+
+    _txplanner_stub.GetMinATS(&cntl, &req, &resp, NULL);
+
+    if (cntl.Failed()) {
+        LOG(WARNING) << "Controller failed error code: " << cntl.ErrorCode()
+                     << " error text: " << cntl.ErrorText();
+        return;
+    }
+
+    _min_ats = resp.min_ats();
 }
 }  // namespace txindex
 }  // namespace azino

@@ -43,6 +43,8 @@ class MVCCValue {
 
     // Finds committed values whose timestamp is smaller or equal than "ts"
     MultiVersionValue::const_iterator Seek(TimeStamp ts) const;
+    // Finds committed values whose timestamp is smaller than "ts"
+    MultiVersionValue::const_iterator Seek2(TimeStamp ts) const;
 
     // Truncate committed values whose timestamp is smaller or equal than "ts",
     // return the number of values truncated

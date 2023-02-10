@@ -292,17 +292,17 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     return sts;
 }
 
-int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas) {
+int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
+                            uint64_t min_ats) {
     std::lock_guard<bthread::Mutex> lck(_latch);
     int cnt = 0;
     for (auto& it : _kvs) {
-        if (it.second.Size() == 0) {
+        txindex::DataToPersist d(it.first, it.second.Seek2(min_ats),
+                                 it.second.MVV().end());
+        if (d.t2vs.size() == 0) {
             continue;
         }
-        txindex::DataToPersist d;
-        d.key = it.first;
-        d.t2vs = it.second.MVV();
-        cnt += it.second.MVV().size();
+        cnt += d.t2vs.size();
         datas.push_back(d);
     }
     return cnt;

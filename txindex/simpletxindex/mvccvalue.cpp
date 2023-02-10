@@ -45,6 +45,12 @@ MultiVersionValue::const_iterator MVCCValue::Seek(TimeStamp ts) const {
     return _mvv.lower_bound(tmp_tx);
 }
 
+MultiVersionValue::const_iterator MVCCValue::Seek2(TimeStamp ts) const {
+    TxIdentifier tmp_tx;
+    tmp_tx.set_commit_ts(ts);
+    return _mvv.upper_bound(tmp_tx);
+}
+
 unsigned MVCCValue::Truncate(const TxIdentifier& txid) {
     auto iter = _mvv.lower_bound(txid);
     auto ans = _mvv.size();

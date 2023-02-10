@@ -394,9 +394,10 @@ TEST_F(TxIndexImplTest, persist) {
     std::vector<azino::txindex::DataToPersist> datas;
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v1, t1, deps).error_code());
-    ASSERT_EQ(0, ti->GetPersisting(datas));
+    ASSERT_EQ(0, ti->GetPersisting(datas, MAX_TIMESTAMP));
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
+
     t2.set_start_ts(4);
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
@@ -407,25 +408,31 @@ TEST_F(TxIndexImplTest, persist) {
               ti->WriteIntent(k1, v2, t2, deps).error_code());
     t2.set_commit_ts(5);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
+
+    datas.clear();
+    ASSERT_EQ(0, ti->GetPersisting(datas, 3));
+    ASSERT_EQ(datas.size(), 0);
+    datas.clear();
+    ASSERT_EQ(1, ti->GetPersisting(datas, 4));
+    ASSERT_EQ(datas.size(), 1);
+    ASSERT_EQ(datas[0].t2vs.size(), 1);
+    datas.clear();
+    ASSERT_EQ(2, ti->GetPersisting(datas, 6));
+    ASSERT_EQ(datas.size(), 1);
+    ASSERT_EQ(datas[0].t2vs.size(), 2);
+    ASSERT_EQ(2, ti->ClearPersisted(datas));
+
+    ASSERT_EQ(0, ti->ClearPersisted(datas));
+
+    datas.clear();
+    ASSERT_EQ(0, ti->GetPersisting(datas, MAX_TIMESTAMP));
+    ASSERT_EQ(datas.size(), 0);
+
     azino::Value read_value;
     azino::TxIdentifier read_tx_3;
     read_tx_3.set_start_ts(3);
     azino::TxIdentifier read_tx_6;
     read_tx_6.set_start_ts(6);
-    ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(v1.content(), read_value.content());
-    ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_Ok);
-    ASSERT_EQ(v2.content(), read_value.content());
-    ASSERT_EQ(2, ti->GetPersisting(datas));
-    ASSERT_EQ(datas.size(), 1);
-    ASSERT_EQ(datas[0].t2vs.size(), 2);
-    ASSERT_EQ(2, ti->ClearPersisted(datas));
-    ASSERT_EQ(0, ti->ClearPersisted(datas));
-    datas.clear();
-    ASSERT_EQ(0, ti->GetPersisting(datas));
-    ASSERT_EQ(datas.size(), 0);
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL, deps).error_code(),
               azino::TxOpStatus_Code_ReadNotExist);
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL, deps).error_code(),

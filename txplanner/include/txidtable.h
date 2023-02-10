@@ -24,20 +24,21 @@ class TxIDTable {
 
     TxIDPtrSet List();
 
-    std::pair<TxIDPtr, TxIDPtr> AddDep(DepType type, const TxIdentifier& t1,
-                                       const TxIdentifier& t2);
+    TxIDPtr BeginTx(TimeStamp start_ts);
+    TxIDPtr CommitTx(const TxIdentifier& txid, TimeStamp commit_ts);
+    TxIDPtr AbortTx(const TxIdentifier& txid);
+
+    TxIDPtrSet GCTx();
 
     int EarlyValidateTxID(const TxIdentifier& txid,
                           ::azino::txplanner::ValidateTxResponse* response,
                           ::google::protobuf::Closure* done);
 
     TxIDPtrSet FindAbortTxnOnConsecutiveRWDep(TxIDPtr t);
+    std::pair<TxIDPtr, TxIDPtr> AddDep(DepType type, const TxIdentifier& t1,
+                                       const TxIdentifier& t2);
 
-    TxIDPtr BeginTx(TimeStamp start_ts);
-    TxIDPtr CommitTx(const TxIdentifier& txid, TimeStamp commit_ts);
-    TxIDPtr AbortTx(const TxIdentifier& txid);
-
-    TxIDPtrSet GCTx();
+    TimeStamp GetMinATS();
 
    private:
     void add_tx(TxIDPtr p);
@@ -51,8 +52,8 @@ class TxIDTable {
     bthread::Mutex _lock;
     TxIDPtrQueue _active_tx;
     TxIDPtrQueue _done_tx;
-    TimeStamp _min_ats = MAX_TIMESTAMP;
-    TimeStamp _max_ats = MIN_TIMESTAMP;
+    TimeStamp _min_ats = 0;
+    TimeStamp _max_ats = 0;
 
     GC gc;
 };
