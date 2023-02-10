@@ -381,8 +381,8 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
                 break;
             default:
                 // todo: fail to lock, may use some optimistic approach
-                ss << " Lock key: " << iter->first
-                   << " value: " << iter->second.value.ShortDebugString()
+                ss << " Lock key: " << key << " value: " << value
+                   << " is_delete: " << is_delete
                    << " error code: " << resp.tx_op_status().error_code()
                    << " error message: " << resp.tx_op_status().error_message();
                 return Status::TxIndexErr(ss.str());

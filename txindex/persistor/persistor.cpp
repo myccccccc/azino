@@ -87,17 +87,15 @@ out:
 }
 
 void Persistor::get_min_ats() {
-    if (butil::gettimeofday_s() - _last_get_min_ats_time <
-        FLAGS_getminats_period_s) {
-        return;
-    }
-    _last_get_min_ats_time = butil::gettimeofday_s();
     brpc::Controller cntl;
     azino::txplanner::GetMinATSRequest req;
     azino::txplanner::GetMinATSResponse resp;
+    if (butil::gettimeofday_s() <
+        _last_get_min_ats_time + FLAGS_getminats_period_s) {
+        return;
+    }
 
     _txplanner_stub.GetMinATS(&cntl, &req, &resp, NULL);
-
     if (cntl.Failed()) {
         LOG(WARNING) << "Controller failed error code: " << cntl.ErrorCode()
                      << " error text: " << cntl.ErrorText();
@@ -105,6 +103,10 @@ void Persistor::get_min_ats() {
     }
 
     _min_ats = resp.min_ats();
+    _last_get_min_ats_time = butil::gettimeofday_s();
+
+    //    LOG(INFO) << "get min ats region:"
+    //              << " min_ats:" << _min_ats;
 }
 }  // namespace txindex
 }  // namespace azino

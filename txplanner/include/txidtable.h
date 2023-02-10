@@ -52,8 +52,9 @@ class TxIDTable {
     bthread::Mutex _lock;
     TxIDPtrQueue _active_tx;
     TxIDPtrQueue _done_tx;
-    TimeStamp _min_ats = 0;
-    TimeStamp _max_ats = 0;
+    TimeStamp _max_allocated_ts = MIN_TIMESTAMP;
+    TimeStamp _min_ats = MIN_TIMESTAMP + 1;
+    TimeStamp _max_ats;
 
     GC gc;
 };

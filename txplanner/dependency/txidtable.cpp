@@ -170,6 +170,7 @@ TxIDPtr TxIDTable::AbortTx(const TxIdentifier& txid) {
 void TxIDTable::add_active_tx(TxIDPtr p) {
     std::lock_guard<bthread::Mutex> lck(_lock);
 
+    _max_allocated_ts = std::max(_max_allocated_ts, p->start_ts());
     _active_tx.push_back(p);
     _min_ats = (*_active_tx.begin())->start_ts();
     _max_ats = (*_active_tx.rbegin())->start_ts();
@@ -177,6 +178,11 @@ void TxIDTable::add_active_tx(TxIDPtr p) {
 
 void TxIDTable::del_active_tx(TxIDPtr p) {
     std::lock_guard<bthread::Mutex> lck(_lock);
+
+    if (p->is_commit()) {
+        _max_allocated_ts =
+            std::max(_max_allocated_ts, p->get_txid().commit_ts());
+    }
 
     while (!_active_tx.empty() && (*_active_tx.begin())->is_done()) {
         _done_tx.push_back(*_active_tx.begin());
@@ -186,7 +192,7 @@ void TxIDTable::del_active_tx(TxIDPtr p) {
         _min_ats = (*_active_tx.begin())->start_ts();
         _max_ats = (*_active_tx.rbegin())->start_ts();
     } else {
-        _min_ats = (*_done_tx.rbegin())->start_ts() + 1;
+        _min_ats = _max_allocated_ts + 1;
         _max_ats = MIN_TIMESTAMP;
     }
 
@@ -237,7 +243,7 @@ TxIDTable::~TxIDTable() { gc.Stop(); }
 TimeStamp TxIDTable::GetMinATS() {
     std::lock_guard<bthread::Mutex> lck(_lock);
 
-    return _max_ats;
+    return _min_ats;
 }
 
 }  // namespace txplanner
