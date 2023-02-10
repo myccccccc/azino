@@ -444,8 +444,7 @@ Status Transaction::Get(const ReadOptions& options, const UserKey& key,
                << " value: " << resp.value().ShortDebugString()
                << " error code: " << resp.tx_op_status().error_code()
                << " error message: " << resp.tx_op_status().error_message();
-            if (resp.tx_op_status().error_code() ==
-                TxOpStatus_Code_ReadNotExist) {
+            if (resp.tx_op_status().error_code() == TxOpStatus_Code_NotExist) {
                 goto readStorage;
             }
             return Status::TxIndexErr(ss.str());

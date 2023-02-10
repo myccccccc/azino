@@ -186,19 +186,16 @@ TEST_F(TxIndexImplTest, write_lock_too_late) {
 
 TEST_F(TxIndexImplTest, clean_not_exist) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_CleanNotExist,
-              ti->Clean(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Clean(k1, t1).error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
                       deps)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_CleanNotExist,
-              ti->Clean(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Clean(k1, t1).error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v2, t2, deps).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_CleanNotExist,
-              ti->Clean(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Clean(k1, t1).error_code());
 }
 
 TEST_F(TxIndexImplTest, clean_ok) {
@@ -222,21 +219,17 @@ TEST_F(TxIndexImplTest, clean_ok) {
 
 TEST_F(TxIndexImplTest, commit_not_exist) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_CommitNotExist,
-              ti->Commit(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t1).error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
                       deps)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_CommitNotExist,
-              ti->Commit(k1, t1).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_CommitNotExist,
-              ti->Commit(k1, t2).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t2).error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v2, t2, deps).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_CommitNotExist,
-              ti->Commit(k1, t1).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t1).error_code());
 }
 
 TEST_F(TxIndexImplTest, commit_ok) {
@@ -349,7 +342,7 @@ TEST_F(TxIndexImplTest, read_block) {
 TEST_F(TxIndexImplTest, read_not_exist) {
     std::vector<azino::txindex::Dep> deps;
     azino::Value read_value;
-    ASSERT_EQ(azino::TxOpStatus_Code_ReadNotExist,
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
@@ -358,25 +351,25 @@ TEST_F(TxIndexImplTest, read_not_exist) {
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
                       deps)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_ReadNotExist,
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v1, t1, deps).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_ReadNotExist,
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
     t1.set_commit_ts(4);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_ReadNotExist,
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
     azino::TxIdentifier read_tx_3;
     read_tx_3.set_start_ts(3);
-    ASSERT_EQ(azino::TxOpStatus_Code_ReadNotExist,
+    ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, read_tx_3,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
@@ -434,9 +427,9 @@ TEST_F(TxIndexImplTest, persist) {
     azino::TxIdentifier read_tx_6;
     read_tx_6.set_start_ts(6);
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_3, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_ReadNotExist);
+              azino::TxOpStatus_Code_NotExist);
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_6, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_ReadNotExist);
+              azino::TxOpStatus_Code_NotExist);
 }
 
 TEST_F(TxIndexImplTest, read_dep_report) {
@@ -465,7 +458,7 @@ TEST_F(TxIndexImplTest, read_dep_report) {
     azino::Value read_value;
     deps.clear();
     ASSERT_EQ(ti->Read(k1, read_value, read_tx_2, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_ReadNotExist);
+              azino::TxOpStatus_Code_NotExist);
 
     ASSERT_EQ(3, deps.size());
     ASSERT_EQ(read_tx_2.start_ts(), deps[0].t1.start_ts());
@@ -483,7 +476,7 @@ TEST_F(TxIndexImplTest, write_dep_report) {
     std::vector<azino::txindex::Dep> deps;
     azino::Value read_value;
     ASSERT_EQ(ti->Read(k1, read_value, t1, NULL, deps).error_code(),
-              azino::TxOpStatus_Code_ReadNotExist);
+              azino::TxOpStatus_Code_NotExist);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v1, t1, deps).error_code());
 

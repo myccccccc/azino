@@ -135,7 +135,7 @@ TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
         mv.LockHolder().start_ts() != txid.start_ts()) {
         ss << "Tx(" << txid.ShortDebugString() << ") clean on "
            << "key: " << key << " not exist. ";
-        sts.set_error_code(TxOpStatus_Code_CleanNotExist);
+        sts.set_error_code(TxOpStatus_Code_NotExist);
         sts.set_error_message(ss.str());
         LOG(ERROR) << ss.str();
         return sts;
@@ -160,7 +160,7 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
         mv.LockHolder().start_ts() != txid.start_ts()) {
         ss << "Tx(" << txid.ShortDebugString() << ") commit on "
            << "key: " << key << " not exist. ";
-        sts.set_error_code(TxOpStatus_Code_CommitNotExist);
+        sts.set_error_code(TxOpStatus_Code_NotExist);
         sts.set_error_message(ss.str());
         LOG(ERROR) << ss.str();
         return sts;
@@ -189,7 +189,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
            << "key: " << key << " not exist. "
            << "Find it's own lock type" << mv.LockType()
            << " Tx: " << mv.LockHolder().ShortDebugString();
-        sts.set_error_code(TxOpStatus_Code_ReadNotExist);
+        sts.set_error_code(TxOpStatus_Code_NotExist);
         sts.set_error_message(ss.str());
         LOG(ERROR) << ss.str();
         return sts;
@@ -231,7 +231,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
         sts.set_error_code(TxOpStatus_Code_Ok);
         v.CopyFrom(*(iter->second));
     } else {
-        sts.set_error_code(TxOpStatus_Code_ReadNotExist);
+        sts.set_error_code(TxOpStatus_Code_NotExist);
     }
     return sts;
 }
