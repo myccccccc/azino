@@ -21,6 +21,11 @@ namespace azino {
 class TxIdentifier;
 class TxWriteBuffer;
 
+typedef std::unique_ptr<brpc::ChannelOptions> ChannelOptionsPtr;
+typedef std::unique_ptr<brpc::Channel> ChannelPtr;
+typedef std::unique_ptr<TxIdentifier> TxIdentifierPtr;
+typedef std::unique_ptr<TxWriteBuffer> TxWriteBufferPtr;
+
 // not thread safe, and it is not reusable.
 class Transaction {
    public:
@@ -31,6 +36,7 @@ class Transaction {
     // tx operations
     Status Begin();
     Status Commit();
+    Status Abort(Status reason = Status::Ok());
 
     // kv operations, fail when tx has not started
     Status Put(const WriteOptions& options, const UserKey& key,
@@ -46,12 +52,12 @@ class Transaction {
     Status CommitAll();
     Status AbortAll();
     Options _options;
-    std::unique_ptr<brpc::ChannelOptions> _channel_options;
-    std::unique_ptr<brpc::Channel> _txplanner;
-    std::unique_ptr<brpc::Channel> _storage;
-    std::vector<std::unique_ptr<brpc::Channel>> _txindexs;
-    std::unique_ptr<TxIdentifier> _txid;
-    std::unique_ptr<TxWriteBuffer> _txwritebuffer;
+    ChannelOptionsPtr _channel_options;
+    ChannelPtr _txplanner;
+    ChannelPtr _storage;
+    std::vector<ChannelPtr> _txindexs;
+    TxIdentifierPtr _txid;
+    TxWriteBufferPtr _txwritebuffer;
 };
 
 }  // namespace azino

@@ -92,12 +92,6 @@ void TxServiceImpl::AbortTx(::google::protobuf::RpcController *controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
 
-    if (request->txid().status().status_code() != TxStatus_Code_Preput) {
-        LOG(WARNING) << cntl->remote_side()
-                     << " tx: " << request->txid().ShortDebugString()
-                     << " are not supposed to abort.";
-    }
-
     auto txidptr = _tt->AbortTx(request->txid());
     auto txid = new TxIdentifier(txidptr->get_txid());
     response->set_allocated_txid(txid);
