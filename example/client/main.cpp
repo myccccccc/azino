@@ -24,6 +24,10 @@ int main(int argc, char* argv[]) {
                 auto sts = tx.Commit();
                 std::cout << sts.ToString() << std::endl;
                 break;
+            } else if (action == "abort") {
+                auto sts = tx.Abort();
+                std::cout << sts.ToString() << std::endl;
+                break;
             } else if (action == "pput") {
                 std::cin >> key >> value;
                 azino::WriteOptions opts;

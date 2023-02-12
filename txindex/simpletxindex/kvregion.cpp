@@ -42,10 +42,11 @@ TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
 }
 
 TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
-                                 const TxIdentifier& txid) {
+                                 const TxIdentifier& txid,
+                                 std::function<void()> callback) {
     Deps deps;
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-    auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, deps);
+    auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, callback, deps);
     DO_RW_DEP_REPORT(deps);
     return sts;
 }

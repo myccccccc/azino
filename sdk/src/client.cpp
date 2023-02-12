@@ -9,11 +9,6 @@
 #include "service/txplanner/txplanner.pb.h"
 #include "txwritebuffer.h"
 
-namespace azino {
-
-DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
-DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
-
 #define LOG_CHANNEL_ERROR(addr, err, ss)                                     \
     ss << " Fail to initialize channel: " << addr << " error code: " << err; \
     LOG(WARNING) << ss.str();
@@ -29,6 +24,20 @@ DEFINE_int32(max_retry, 2, "Max retries(not including the first RPC)");
               << " response: " << resp.ShortDebugString()                     \
               << " latency= " << cntl.latency_us() << "us" << std::endl;
 
+#define BEGIN_CHECK(action)                                     \
+    if (!_txid) {                                               \
+        ss << " Transaction has not began.";                    \
+        return Status::IllegalTxOp(ss.str());                   \
+    }                                                           \
+    if (_txid->status().status_code() != TxStatus_Code_Start) { \
+        ss << " Transaction is not allowed to " << #action      \
+           << _txid->ShortDebugString();                        \
+        return Status::IllegalTxOp(ss.str());                   \
+    }
+
+DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
+
+namespace azino {
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
     : _options(options),
@@ -36,7 +45,6 @@ Transaction::Transaction(const Options& options,
       _txid(nullptr),
       _txwritebuffer(new TxWriteBuffer) {
     _channel_options->timeout_ms = FLAGS_timeout_ms;
-    _channel_options->max_retry = FLAGS_max_retry;
 
     std::stringstream ss;
     auto* channel = new brpc::Channel();
@@ -54,14 +62,15 @@ Transaction::~Transaction() = default;
 Status Transaction::Begin() {
     int err = 0;
     std::stringstream ss;
+    brpc::Controller cntl;
+    azino::txplanner::BeginTxRequest req;
+    azino::txplanner::BeginTxResponse resp;
+    azino::txplanner::TxService_Stub stub(_txplanner.get());
     if (_txid) {
         ss << " Transaction has already began. " << _txid->ShortDebugString();
         return Status::IllegalTxOp(ss.str());
     }
-    azino::txplanner::TxService_Stub stub(_txplanner.get());
-    brpc::Controller cntl;
-    azino::txplanner::BeginTxRequest req;
-    azino::txplanner::BeginTxResponse resp;
+
     stub.BeginTx(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
         LOG_CONTROLLER_ERROR(cntl, ss)
@@ -84,6 +93,7 @@ Status Transaction::Begin() {
         return Status::TxPlannerErr(ss.str());
     }
 
+    // init storage channel
     auto* channel = new brpc::Channel();
     err = channel->Init(resp.storage_addr().c_str(), _channel_options.get());
     if (err) {
@@ -92,6 +102,7 @@ Status Transaction::Begin() {
     }
     _storage.reset(channel);
 
+    // init txindex channels
     for (int i = 0; i < resp.txindex_addrs_size(); i++) {
         auto* txindex_channel = new brpc::Channel();
         err = txindex_channel->Init(resp.txindex_addrs(i).c_str(),
@@ -106,66 +117,14 @@ Status Transaction::Begin() {
     return Status::Ok();
 }
 
-Status Transaction::Commit() {
+Status Transaction::Abort(Status reason) {
     std::stringstream ss;
-    Status preput_sts = Status::Ok();
-    Status commit_sts = Status::Ok();
-    Status abort_sts = Status::Ok();
-    azino::txplanner::TxService_Stub stub(_txplanner.get());
     brpc::Controller cntl;
-    azino::txplanner::CommitTxRequest req;
-    azino::txplanner::CommitTxResponse resp;
     azino::txplanner::AbortTxRequest areq;
     azino::txplanner::AbortTxResponse aresp;
-    if (!_txid) {
-        ss << " Transaction has not began. ";
-        return Status::IllegalTxOp(ss.str());
-    }
-    if (_txid->status().status_code() != TxStatus_Code_Start) {
-        ss << " Transaction is not allowed to commit. "
-           << _txid->ShortDebugString();
-        return Status::IllegalTxOp(ss.str());
-    }
+    azino::txplanner::TxService_Stub stub(_txplanner.get());
+    BEGIN_CHECK(abort)
 
-    auto txid_sts = _txid->release_status();
-    txid_sts->set_status_code(TxStatus_Code_Preput);
-    _txid->set_allocated_status(txid_sts);
-
-    preput_sts = PreputAll();
-    if (!preput_sts.IsOk()) {
-        goto abort;
-    }
-
-    req.set_allocated_txid(new TxIdentifier(*_txid));
-    stub.CommitTx(&cntl, &req, &resp, nullptr);
-    if (cntl.Failed()) {
-        LOG_CONTROLLER_ERROR(cntl, ss)
-        return Status::NetworkErr(ss.str());
-    }
-
-    LOG_SDK(cntl, req, resp, CommitTx_from_txplanner)
-
-    _txid.reset(resp.release_txid());
-    txid_sts = _txid->release_status();
-    _txid->set_allocated_status(txid_sts);
-    if (_txid->status().status_code() != TxStatus_Code_Commit) {
-        ss << " Wrong tx status code when commit: "
-           << _txid->ShortDebugString();
-        preput_sts = Status::TxPlannerErr(ss.str());
-        goto abort;
-    }
-
-    commit_sts = CommitAll();
-    if (commit_sts.IsOk()) {
-        txid_sts->set_status_message(commit_sts.ToString());
-        return commit_sts;
-    } else {
-        txid_sts->set_status_code(TxStatus_Code_Abnormal);
-        txid_sts->set_status_message(commit_sts.ToString());
-        return commit_sts;
-    }
-
-abort:
     if (_txid->status().status_code() != TxStatus_Code_Abort) {
         areq.set_allocated_txid(new TxIdentifier(*_txid));
         stub.AbortTx(&cntl, &areq, &aresp, nullptr);
@@ -179,21 +138,60 @@ abort:
         _txid.reset(aresp.release_txid());
     }
 
-    txid_sts = _txid->release_status();
-    _txid->set_allocated_status(txid_sts);
     if (_txid->status().status_code() != TxStatus_Code_Abort) {
         ss << " Wrong tx status code when abort: " << _txid->ShortDebugString();
         return Status::TxPlannerErr(ss.str());
     }
 
-    abort_sts = AbortAll();
+    auto abort_sts = AbortAll();
     if (abort_sts.IsOk()) {
-        txid_sts->set_status_message(preput_sts.ToString());
-        return preput_sts;
+        _txid->mutable_status()->set_status_message(reason.ToString());
+        return reason;
     } else {
-        txid_sts->set_status_code(TxStatus_Code_Abnormal);
-        txid_sts->set_status_message(abort_sts.ToString());
+        _txid->mutable_status()->set_status_code(TxStatus_Code_Abnormal);
+        _txid->mutable_status()->set_status_message(abort_sts.ToString());
         return abort_sts;
+    }
+}
+
+Status Transaction::Commit() {
+    std::stringstream ss;
+    azino::txplanner::TxService_Stub stub(_txplanner.get());
+    brpc::Controller cntl;
+    azino::txplanner::CommitTxRequest req;
+    azino::txplanner::CommitTxResponse resp;
+    BEGIN_CHECK(commit)
+
+    _txid->mutable_status()->set_status_code(TxStatus_Code_Preput);
+    auto preput_sts = PreputAll();
+    if (!preput_sts.IsOk()) {
+        return Abort(preput_sts);
+    }
+
+    req.set_allocated_txid(new TxIdentifier(*_txid));
+    stub.CommitTx(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
+    }
+
+    LOG_SDK(cntl, req, resp, CommitTx_from_txplanner)
+
+    _txid.reset(resp.release_txid());
+    if (_txid->status().status_code() != TxStatus_Code_Commit) {
+        ss << " Wrong tx status code when commit: "
+           << _txid->ShortDebugString();
+        return Abort(Status::TxPlannerErr(ss.str()));
+    }
+
+    auto commit_sts = CommitAll();
+    if (commit_sts.IsOk()) {
+        _txid->mutable_status()->set_status_message(commit_sts.ToString());
+        return commit_sts;
+    } else {
+        _txid->mutable_status()->set_status_code(TxStatus_Code_Abnormal);
+        _txid->mutable_status()->set_status_message(commit_sts.ToString());
+        return commit_sts;
     }
 }
 
@@ -211,21 +209,17 @@ Status Transaction::PreputAll() {
 
         brpc::Controller cntl;
         azino::txindex::WriteIntentRequest req;
-        // todo: avoid memory copy here
+        azino::txindex::WriteIntentResponse resp;
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
-        req.set_allocated_value(&iter->second.value);
-        azino::txindex::WriteIntentResponse resp;
+        req.set_allocated_value(new Value(iter->second.value));
         stub.WriteIntent(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
             LOG_CONTROLLER_ERROR(cntl, ss)
-            req.release_value();
             return Status::NetworkErr(ss.str());
         }
 
         LOG_SDK(cntl, req, resp, WriteIntent_from_txindex)
-
-        req.release_value();
 
         switch (resp.tx_op_status().error_code()) {
             case TxOpStatus_Code_Ok:
@@ -257,10 +251,9 @@ Status Transaction::CommitAll() {
 
         brpc::Controller cntl;
         azino::txindex::CommitRequest req;
-        // todo: avoid memory copy here
+        azino::txindex::CommitResponse resp;
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
-        azino::txindex::CommitResponse resp;
         stub.Commit(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
             LOG_CONTROLLER_ERROR(cntl, ss)
@@ -300,10 +293,9 @@ Status Transaction::AbortAll() {
 
         brpc::Controller cntl;
         azino::txindex::CleanRequest req;
-        // todo: avoid memory copy here
+        azino::txindex::CleanResponse resp;
         req.set_allocated_txid(new TxIdentifier(*_txid));
         req.set_key(iter->first);
-        azino::txindex::CleanResponse resp;
         stub.Clean(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
             LOG_CONTROLLER_ERROR(cntl, ss)
@@ -339,20 +331,12 @@ Status Transaction::Delete(const WriteOptions& options, const UserKey& key) {
 Status Transaction::Write(const WriteOptions& options, const UserKey& key,
                           bool is_delete, const UserValue& value) {
     std::stringstream ss;
-    if (!_txid) {
-        ss << " Transaction has not began.";
-        return Status::IllegalTxOp(ss.str());
-    }
-    if (_txid->status().status_code() != TxStatus_Code_Start) {
-        ss << " Transaction is not allowed to put. "
-           << _txid->ShortDebugString();
-        return Status::IllegalTxOp(ss.str());
-    }
+    BEGIN_CHECK(write);
 
     auto iter = _txwritebuffer->find(key);
     if (options.type == kPessimistic &&
         (iter == _txwritebuffer->end() ||
-         iter->second.status != TxWriteStatus::LOCKED)) {
+         iter->second.status < TxWriteStatus::LOCKED)) {
         // Pessimistic
 
         // todo: use a wrapper
@@ -361,10 +345,9 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
 
         brpc::Controller cntl;
         azino::txindex::WriteLockRequest req;
-        // todo: avoid memory copy here
+        azino::txindex::WriteLockResponse resp;
         req.set_key(key);
         req.set_allocated_txid(new TxIdentifier(*_txid));
-        azino::txindex::WriteLockResponse resp;
         stub.WriteLock(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
             LOG_CONTROLLER_ERROR(cntl, ss)
@@ -397,6 +380,7 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
 Status Transaction::Get(const ReadOptions& options, const UserKey& key,
                         UserValue& value) {
     std::stringstream ss;
+    BEGIN_CHECK(read)
 
     auto iter = _txwritebuffer->find(key);
     if (iter != _txwritebuffer->end()) {
@@ -417,10 +401,9 @@ Status Transaction::Get(const ReadOptions& options, const UserKey& key,
 
     brpc::Controller cntl;
     azino::txindex::ReadRequest req;
-    // todo: avoid memory copy here
+    azino::txindex::ReadResponse resp;
     req.set_key(key);
     req.set_allocated_txid(new TxIdentifier(*_txid));
-    azino::txindex::ReadResponse resp;
     stub.Read(&cntl, &req, &resp, nullptr);
     if (cntl.Failed()) {
         LOG_CONTROLLER_ERROR(cntl, ss)
@@ -439,15 +422,13 @@ Status Transaction::Get(const ReadOptions& options, const UserKey& key,
                 value = resp.value().content();
                 return Status::Ok(ss.str());
             }
+        case TxOpStatus_Code_NotExist:
+            goto readStorage;
         default:
             ss << " Find in TxIndex Key: " << key
                << " value: " << resp.value().ShortDebugString()
                << " error code: " << resp.tx_op_status().error_code()
                << " error message: " << resp.tx_op_status().error_message();
-            if (resp.tx_op_status().error_code() ==
-                TxOpStatus_Code_ReadNotExist) {
-                goto readStorage;
-            }
             return Status::TxIndexErr(ss.str());
     }
 
@@ -455,9 +436,9 @@ readStorage:
     azino::storage::StorageService_Stub storage_stub(_storage.get());
     brpc::Controller storage_cntl;
     azino::storage::MVCCGetRequest storage_req;
+    azino::storage::MVCCGetResponse storage_resp;
     storage_req.set_key(key);
     storage_req.set_ts(_txid->start_ts());
-    azino::storage::MVCCGetResponse storage_resp;
     storage_stub.MVCCGet(&storage_cntl, &storage_req, &storage_resp, nullptr);
     std::stringstream storage_ss;
     if (storage_cntl.Failed()) {

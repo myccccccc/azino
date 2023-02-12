@@ -38,7 +38,8 @@ class TxIndex {
     // this key, intent or lock exists. Should success if txid already hold this
     // intent or lock, and change lock to intent at the same time.
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid);
+                                   const TxIdentifier& txid,
+                                   std::function<void()> callback);
 
     // This is an atomic read-write operation for one user_key, used in both
     // pessimistic and optimistic transactions. Success when it finds and cleans
@@ -73,7 +74,11 @@ class KVBucket {
     TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid,
                          std::function<void()> callback, Deps& deps);
     TxOpStatus WriteIntent(const std::string& key, const Value& v,
-                           const TxIdentifier& txid, Deps& deps);
+                           const TxIdentifier& txid,
+                           std::function<void()> callback, Deps& deps);
+    TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,
+                     const std::string& key, const Value& v,
+                     std::function<void()> callback, Deps& deps);
     TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
@@ -97,7 +102,8 @@ class KVRegion : public txindex::TxIndex {
                                  const TxIdentifier& txid,
                                  std::function<void()> callback) override;
     virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid) override;
+                                   const TxIdentifier& txid,
+                                   std::function<void()> callback) override;
     virtual TxOpStatus Clean(const std::string& key,
                              const TxIdentifier& txid) override;
     virtual TxOpStatus Commit(const std::string& key,
