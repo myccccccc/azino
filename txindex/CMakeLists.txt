@@ -4,8 +4,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/src/kvregion.cpp
                                    ${PROJECT_SOURCE_DIR}/src/txopserviceimpl.cpp
-                                   ${PROJECT_SOURCE_DIR}/src/persistor.cpp
-                                   ${PROJECT_SOURCE_DIR}/src/depreporter.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/persist.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/depedence.cpp
                                    ${PROJECT_SOURCE_DIR}/src/kvbucket.cpp
                                    ${PROJECT_SOURCE_DIR}/src/mvccvalue.cpp
                                    ${PROJECT_SOURCE_DIR}/src/txindex.cpp src/metric.cpp)

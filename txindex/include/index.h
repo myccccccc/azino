@@ -6,11 +6,11 @@
 #include <unordered_map>
 
 #include "azino/kv.h"
+#include "depedence.h"
 #include "gflags/gflags.h"
 #include "metric.h"
 #include "mvccvalue.h"
-#include "persistor.h"
-#include "reporter.h"
+#include "persist.h"
 #include "service/kv.pb.h"
 #include "service/tx.pb.h"
 
@@ -123,8 +123,8 @@ class KVRegion : public txindex::TxIndex {
 
    private:
     std::vector<KVBucket> _kvbs;
-    Persistor _persistor;
-    DepReporter _deprpt;
+    RegionPersist _persistor;
+    Dependence _deprpt;
     RegionMetric _metric;
 };
 

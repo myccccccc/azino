@@ -1,5 +1,5 @@
-#ifndef AZINO_TXINDEX_INCLUDE_PERSISTOR_H
-#define AZINO_TXINDEX_INCLUDE_PERSISTOR_H
+#ifndef AZINO_TXINDEX_INCLUDE_PERSIST_H
+#define AZINO_TXINDEX_INCLUDE_PERSIST_H
 
 #include <brpc/channel.h>
 #include <butil/macros.h>
@@ -29,12 +29,12 @@ struct DataToPersist {
     MultiVersionValue t2vs;
 };
 
-class Persistor : public azino::BackgroundTask {
+class RegionPersist : public azino::BackgroundTask {
    public:
-    Persistor(KVRegion* region, brpc::Channel* storage_channel,
-              brpc::Channel* txplaner_channel);
-    DISALLOW_COPY_AND_ASSIGN(Persistor);
-    ~Persistor() = default;
+    RegionPersist(KVRegion* region, brpc::Channel* storage_channel,
+                  brpc::Channel* txplaner_channel);
+    DISALLOW_COPY_AND_ASSIGN(RegionPersist);
+    ~RegionPersist() = default;
 
    private:
     void persist();
@@ -53,4 +53,4 @@ class Persistor : public azino::BackgroundTask {
 }  // namespace txindex
 }  // namespace azino
 
-#endif  // AZINO_TXINDEX_INCLUDE_PERSISTOR_H
+#endif  // AZINO_TXINDEX_INCLUDE_PERSIST_H

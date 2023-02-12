@@ -1,5 +1,5 @@
-#ifndef AZINO_TXINDEX_INCLUDE_REPORTER_H
-#define AZINO_TXINDEX_INCLUDE_REPORTER_H
+#ifndef AZINO_TXINDEX_INCLUDE_DEPEDENCE_H
+#define AZINO_TXINDEX_INCLUDE_DEPEDENCE_H
 
 #include <brpc/channel.h>
 #include <bthread/execution_queue.h>
@@ -26,11 +26,11 @@ typedef struct Dep {
 typedef std::vector<Dep> Deps;
 
 class KVRegion;
-class DepReporter {
+class Dependence {
    public:
-    DepReporter(KVRegion* region, brpc::Channel* txplaner_channel);
-    DISALLOW_COPY_AND_ASSIGN(DepReporter);
-    ~DepReporter();
+    Dependence(KVRegion* region, brpc::Channel* txplaner_channel);
+    DISALLOW_COPY_AND_ASSIGN(Dependence);
+    ~Dependence();
 
     void AsyncReadWriteReport(const Deps& deps);
 
@@ -44,4 +44,4 @@ class DepReporter {
 
 }  // namespace txindex
 }  // namespace azino
-#endif  // AZINO_TXINDEX_INCLUDE_REPORTER_H
+#endif  // AZINO_TXINDEX_INCLUDE_DEPEDENCE_H

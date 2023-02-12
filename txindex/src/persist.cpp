@@ -1,4 +1,4 @@
-#include "persistor.h"
+#include "persist.h"
 
 #include <gflags/gflags.h>
 
@@ -15,19 +15,19 @@ static bvar::GFlag gflag_getminats_period_s("getminats_period_s");
 namespace azino {
 namespace txindex {
 
-Persistor::Persistor(KVRegion *region, brpc::Channel *storage_channel,
-                     brpc::Channel *txplaner_channel)
+RegionPersist::RegionPersist(KVRegion *region, brpc::Channel *storage_channel,
+                             brpc::Channel *txplaner_channel)
     : _region(region),
       _storage_stub(storage_channel),
       _txplanner_stub(txplaner_channel),
       _last_persist_bucket_num(0),
       _last_get_min_ats_time(0),
       _min_ats(0) {
-    fn = Persistor::execute;
+    fn = RegionPersist::execute;
 }
 
-void *Persistor::execute(void *args) {
-    auto p = reinterpret_cast<Persistor *>(args);
+void *RegionPersist::execute(void *args) {
+    auto p = reinterpret_cast<RegionPersist *>(args);
     while (true) {
         bthread_usleep(FLAGS_persist_period_ms * 1000);
         {
@@ -42,7 +42,7 @@ void *Persistor::execute(void *args) {
     return nullptr;
 }
 
-void Persistor::persist() {
+void RegionPersist::persist() {
     brpc::Controller cntl;
     azino::storage::BatchStoreRequest req;
     azino::storage::BatchStoreResponse resp;
@@ -89,7 +89,7 @@ out:
     return;
 }
 
-void Persistor::get_min_ats() {
+void RegionPersist::get_min_ats() {
     brpc::Controller cntl;
     azino::txplanner::GetMinATSRequest req;
     azino::txplanner::GetMinATSResponse resp;

@@ -5,8 +5,8 @@
 #include <functional>
 #include <unordered_map>
 
+#include "depedence.h"
 #include "index.h"
-#include "reporter.h"
 
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \

@@ -21,26 +21,26 @@ void HandleDepResponse(brpc::Controller* cntl, txplanner::DepResponse* resp) {
     }
 }
 
-DepReporter::DepReporter(KVRegion* region, brpc::Channel* txplaner_channel)
+Dependence::Dependence(KVRegion* region, brpc::Channel* txplaner_channel)
     : _region(region), _stub(txplaner_channel), _deps_queue() {
     bthread::ExecutionQueueOptions options;
     if (bthread::execution_queue_start(&_deps_queue, &options,
-                                       DepReporter::execute, this) != 0) {
-        LOG(ERROR) << "fail to start execution queue in DepReporter";
+                                       Dependence::execute, this) != 0) {
+        LOG(ERROR) << "fail to start execution queue in Dependence";
     }
 }
 
-DepReporter::~DepReporter() {
+Dependence::~Dependence() {
     if (bthread::execution_queue_stop(_deps_queue) != 0) {
-        LOG(ERROR) << "fail to stop execution queue in DepReporter";
+        LOG(ERROR) << "fail to stop execution queue in Dependence";
     }
     if (bthread::execution_queue_join(_deps_queue) != 0) {
-        LOG(ERROR) << "fail to join execution queue in DepReporter";
+        LOG(ERROR) << "fail to join execution queue in Dependence";
     }
 }
 
-int DepReporter::execute(void* args, bthread::TaskIterator<Deps>& iter) {
-    auto p = reinterpret_cast<DepReporter*>(args);
+int Dependence::execute(void* args, bthread::TaskIterator<Deps>& iter) {
+    auto p = reinterpret_cast<Dependence*>(args);
     Deps deps;
     if (iter.is_queue_stopped()) {
         return 0;
@@ -81,12 +81,12 @@ int DepReporter::execute(void* args, bthread::TaskIterator<Deps>& iter) {
     return 0;
 }
 
-void DepReporter::AsyncReadWriteReport(const Deps& deps) {
+void Dependence::AsyncReadWriteReport(const Deps& deps) {
     if (deps.empty()) {
         return;
     }
     if (bthread::execution_queue_execute(_deps_queue, deps) != 0) {
-        LOG(ERROR) << "fail to add task execution queue in DepReporter";
+        LOG(ERROR) << "fail to add task execution queue in Dependence";
     }
 }
 

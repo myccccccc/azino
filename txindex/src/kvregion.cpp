@@ -4,8 +4,8 @@
 
 #include <functional>
 
+#include "depedence.h"
 #include "index.h"
-#include "reporter.h"
 
 DEFINE_int32(latch_bucket_num, 128, "latch buckets number");
 

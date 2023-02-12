@@ -3,9 +3,9 @@
 #include <butil/hash.h>
 #include <gtest/gtest.h>
 
+#include "depedence.h"
 #include "index.h"
-#include "persistor.h"
-#include "reporter.h"
+#include "persist.h"
 #include "service/storage/storage.pb.h"
 
 class TxIndexImplTest : public testing::Test {
@@ -47,9 +47,6 @@ class TxIndexImplTest : public testing::Test {
    protected:
     void SetUp() {
         UnCalled();
-        FLAGS_latch_bucket_num = 1;
-        FLAGS_enable_persistor = false;
-        FLAGS_enable_dep_reporter = false;
         is_lock_update = false;
         ti = new azino::txindex::KVBucket;  //  A dummy address
         t1.set_start_ts(1);
