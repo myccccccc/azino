@@ -1,5 +1,7 @@
 #include "txid.h"
 
+#include <butil/time.h>
+
 std::hash<uint64_t> hash;
 
 #define LOCK2(p1, p2)                                             \
@@ -169,34 +171,37 @@ TxIDPtr TxID::New(TimeStamp start_ts) {
     TxIDPtr p(new TxID);
     p->txid.CopyFrom(txid);
     p->_start_ts = start_ts;
+    p->_begin_time = butil::gettimeofday_ms();
     return p;
 }
 
-void TxID::commit(TimeStamp commit_ts) {
+int TxID::commit(TimeStamp commit_ts) {
     std::lock_guard<bthread::Mutex> lck(m);
 
     if (txid.status().status_code() > TxStatus_Code_Preput) {
         // may happen, client will abort this tx
         LOG(INFO) << "unexpected status code when commit tx:"
                   << txid.ShortDebugString();
-        return;
+        return EINVAL;
     }
 
     txid.set_commit_ts(commit_ts);
     txid.mutable_status()->set_status_code(TxStatus_Code_Commit);
+    return 0;
 }
 
-void TxID::abort() {
+int TxID::abort() {
     std::lock_guard<bthread::Mutex> lck(m);
 
     if (txid.status().status_code() > TxStatus_Code_Preput) {
         // should not happen
         LOG(ERROR) << "unexpected status code when abort tx:"
                    << txid.ShortDebugString();
-        return;
+        return EINVAL;
     }
 
     txid.mutable_status()->set_status_code(TxStatus_Code_Abort);
+    return 0;
 }
 
 TxIDPtrSet TxID::FindAbortTxnOnConsecutiveRWDep(const TxIDPtr& t1,
