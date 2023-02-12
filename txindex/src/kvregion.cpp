@@ -1,4 +1,5 @@
 #include <butil/hash.h>
+#include <butil/time.h>
 #include <gflags/gflags.h>
 
 #include <functional>
@@ -20,9 +21,13 @@ KVRegion::KVRegion(brpc::Channel* storage_channel,
                    brpc::Channel* txplaner_channel)
     : _kvbs(FLAGS_latch_bucket_num),
       _persistor(this, storage_channel, txplaner_channel),
-      _deprpt(txplaner_channel) {
+      _deprpt(this, txplaner_channel),
+      _metric(this, txplaner_channel) {
     if (FLAGS_enable_persistor) {
         _persistor.Start();
+    }
+    if (FLAGS_enable_region_metric_report) {
+        _metric.Start();
     }
 }
 
@@ -30,24 +35,39 @@ KVRegion::~KVRegion() {
     if (FLAGS_enable_persistor) {
         _persistor.Stop();
     }
+    if (FLAGS_enable_region_metric_report) {
+        _metric.Stop();
+    }
 }
 
 TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
                                std::function<void()> callback) {
+    int64_t start_time = butil::gettimeofday_us();
     Deps deps;
+    bool is_lock_update = false;
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-    auto sts = _kvbs[bucket_num].WriteLock(key, txid, callback, deps);
+    auto sts =
+        _kvbs[bucket_num].WriteLock(key, txid, callback, deps, is_lock_update);
     DO_RW_DEP_REPORT(deps);
+    if (!is_lock_update) {
+        _metric.RecordWrite(sts, start_time);
+    }
     return sts;
 }
 
 TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
                                  const TxIdentifier& txid,
                                  std::function<void()> callback) {
+    int64_t start_time = butil::gettimeofday_us();
     Deps deps;
+    bool is_lock_update = false;
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-    auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, callback, deps);
+    auto sts = _kvbs[bucket_num].WriteIntent(key, value, txid, callback, deps,
+                                             is_lock_update);
     DO_RW_DEP_REPORT(deps);
+    if (!is_lock_update) {
+        _metric.RecordWrite(sts, start_time);
+    }
     return sts;
 }
 
@@ -64,10 +84,12 @@ TxOpStatus KVRegion::Commit(const std::string& key, const TxIdentifier& txid) {
 TxOpStatus KVRegion::Read(const std::string& key, Value& v,
                           const TxIdentifier& txid,
                           std::function<void()> callback) {
+    int64_t start_time = butil::gettimeofday_us();
     Deps deps;
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
     auto sts = _kvbs[bucket_num].Read(key, v, txid, callback, deps);
     DO_RW_DEP_REPORT(deps);
+    _metric.RecordRead(sts, start_time);
     return sts;
 }
 

@@ -38,15 +38,18 @@ namespace azino {
 namespace txindex {
 
 TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
-                               std::function<void()> callback, Deps& deps) {
+                               std::function<void()> callback, Deps& deps,
+                               bool& is_lock_update) {
     return Write(MVCCLock::WriteLock, txid, key, Value::default_instance(),
-                 callback, deps);
+                 callback, deps, is_lock_update);
 }
 
 TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
                                  const TxIdentifier& txid,
-                                 std::function<void()> callback, Deps& deps) {
-    return Write(MVCCLock::WriteIntent, txid, key, v, callback, deps);
+                                 std::function<void()> callback, Deps& deps,
+                                 bool& is_lock_update) {
+    return Write(MVCCLock::WriteIntent, txid, key, v, callback, deps,
+                 is_lock_update);
 }
 
 TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
@@ -201,7 +204,8 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
 
 TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
                            const std::string& key, const Value& v,
-                           std::function<void()> callback, Deps& deps) {
+                           std::function<void()> callback, Deps& deps,
+                           bool& is_lock_update) {
     std::lock_guard<bthread::Mutex> lck(_latch);
     TxOpStatus sts;
     std::stringstream ss;
@@ -236,6 +240,7 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
         }
 
         // change write_lock to write_intent
+        is_lock_update = true;
         // go down
     }
 

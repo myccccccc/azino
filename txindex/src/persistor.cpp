@@ -6,8 +6,11 @@
 
 DEFINE_bool(enable_persistor, true,
             "enable persistor to persist data to storage server");
+static bvar::GFlag gflag_enable_persistor("enable_persistor");
 DEFINE_int32(persist_period_ms, 100, "persist period time");
+static bvar::GFlag gflag_persist_period_ms("persist_period_ms");
 DEFINE_int32(getminats_period_s, 2, "get min_ats period time");
+static bvar::GFlag gflag_getminats_period_s("getminats_period_s");
 
 namespace azino {
 namespace txindex {
@@ -53,7 +56,7 @@ void Persistor::persist() {
         goto out;
     }
 
-    LOG(INFO) << "get data to persist, region:"
+    LOG(INFO) << "get data to persist, region:" << _region->Describe()
               << " bucket:" << persist_bucket_num
               << " persist key num:" << datas.size()
               << " persist value num:" << cnt << " min_ats:" << _min_ats;

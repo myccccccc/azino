@@ -1,6 +1,7 @@
 #include "index.h"
 
 DEFINE_bool(enable_dep_reporter, true, "enable dependency reporter");
+static bvar::GFlag gflag_enable_dep_reporter("enable_dep_reporter");
 
 namespace azino {
 namespace txindex {
@@ -20,8 +21,8 @@ void HandleDepResponse(brpc::Controller* cntl, txplanner::DepResponse* resp) {
     }
 }
 
-DepReporter::DepReporter(brpc::Channel* txplaner_channel)
-    : _stub(txplaner_channel), _deps_queue() {
+DepReporter::DepReporter(KVRegion* region, brpc::Channel* txplaner_channel)
+    : _region(region), _stub(txplaner_channel), _deps_queue() {
     bthread::ExecutionQueueOptions options;
     if (bthread::execution_queue_start(&_deps_queue, &options,
                                        DepReporter::execute, this) != 0) {
@@ -64,9 +65,9 @@ int DepReporter::execute(void* args, bthread::TaskIterator<Deps>& iter) {
             continue;
         }
 
-        LOG(INFO) << " Dep report type:"
-                  << "readwrite"
-                  << " key:" << key << " ts:" << t1.ShortDebugString()
+        LOG(INFO) << " Dep report type: readwirte region:"
+                  << p->_region->Describe() << " key:" << key
+                  << " ts:" << t1.ShortDebugString()
                   << " t2:" << t2.ShortDebugString();
 
         auto pb_dep = req.add_deps();

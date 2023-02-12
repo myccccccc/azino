@@ -25,9 +25,10 @@ typedef struct Dep {
 
 typedef std::vector<Dep> Deps;
 
+class KVRegion;
 class DepReporter {
    public:
-    DepReporter(brpc::Channel* txplaner_channel);
+    DepReporter(KVRegion* region, brpc::Channel* txplaner_channel);
     DISALLOW_COPY_AND_ASSIGN(DepReporter);
     ~DepReporter();
 
@@ -36,6 +37,7 @@ class DepReporter {
    private:
     static int execute(void* args, bthread::TaskIterator<Deps>& iter);
 
+    KVRegion* _region;
     txplanner::RegionService_Stub _stub;
     bthread::ExecutionQueueId<Deps> _deps_queue;
 };
