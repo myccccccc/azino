@@ -63,5 +63,11 @@ void RegionServiceImpl::GetMinATS(
     response->set_min_ats(_tt->GetMinATS());
 }
 
+void RegionServiceImpl::RegionMetric(
+    ::google::protobuf::RpcController* controller,
+    const ::azino::txplanner::RegionMetricRequest* request,
+    ::azino::txplanner::RegionMetricResponse* response,
+    ::google::protobuf::Closure* done) {}
+
 }  // namespace txplanner
 }  // namespace azino

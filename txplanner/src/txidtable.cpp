@@ -3,6 +3,7 @@
 #include <gflags/gflags.h>
 
 DEFINE_bool(enable_gc, true, "enable gc tx");
+static bvar::GFlag gflag_enable_gc_tx("enable gc tx");
 
 namespace azino {
 namespace txplanner {
@@ -139,9 +140,13 @@ TxIDPtr TxIDTable::CommitTx(const TxIdentifier& txid, TimeStamp commit_ts) {
 
     lck.unlock();
 
-    p->commit(commit_ts);
+    if (p->commit(commit_ts) != 0) {
+        goto out;
+    }
     del_active_tx(p);
+    metric.RecordCommit(p);
 
+out:
     return p;
 }
 
@@ -159,11 +164,15 @@ TxIDPtr TxIDTable::AbortTx(const TxIdentifier& txid) {
 
     lck.unlock();
 
-    p->abort();
+    if (p->abort() != 0) {
+        goto out;
+    }
     TxID::ClearDep(p);
     p->early_validate();
     del_active_tx(p);
+    metric.RecordAbort(p);
 
+out:
     return p;
 }
 
@@ -232,7 +241,7 @@ TxIDPtrSet TxIDTable::gc_inactive_tx() {
     return res;
 }
 
-TxIDTable::TxIDTable() : gc(this) {
+TxIDTable::TxIDTable() : gc(this), metric() {
     if (FLAGS_enable_gc) {
         gc.Start();
     }

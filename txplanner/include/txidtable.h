@@ -10,6 +10,7 @@
 #include "azino/kv.h"
 #include "dependency.h"
 #include "gc.h"
+#include "metric.h"
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 #include "txid.h"
@@ -57,6 +58,7 @@ class TxIDTable {
     TimeStamp _max_ats;
 
     GC gc;
+    TxMetric metric;
 };
 
 }  // namespace txplanner

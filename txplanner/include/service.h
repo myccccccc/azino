@@ -61,6 +61,12 @@ class RegionServiceImpl : public RegionService {
                            ::azino::txplanner::GetMinATSResponse* response,
                            ::google::protobuf::Closure* done) override;
 
+    virtual void RegionMetric(
+        ::google::protobuf::RpcController* controller,
+        const ::azino::txplanner::RegionMetricRequest* request,
+        ::azino::txplanner::RegionMetricResponse* response,
+        ::google::protobuf::Closure* done) override;
+
    private:
     TxIDTable* _tt;
 };

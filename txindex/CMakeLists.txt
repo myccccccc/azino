@@ -2,10 +2,14 @@ project(azino_txindex C CXX)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/simpletxindex/kvregion.cpp
-                                   ${PROJECT_SOURCE_DIR}/service/txopserviceimpl.cpp
-                                   ${PROJECT_SOURCE_DIR}/persistor/persistor.cpp
-                                   ${PROJECT_SOURCE_DIR}/reporter/depreporter.cpp simpletxindex/kvbucket.cpp simpletxindex/mvccvalue.cpp simpletxindex/txindex.cpp)
+add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/src/kvregion.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/txopserviceimpl.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/persist.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/depedence.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/kvbucket.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/mvccvalue.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/txindex.cpp src/metric.cpp)
+
 add_library(azino_txindex::lib ALIAS ${PROJECT_NAME})
 
 add_executable(txindex_server ${PROJECT_SOURCE_DIR}/main.cpp)

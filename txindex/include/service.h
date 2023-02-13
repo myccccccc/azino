@@ -9,7 +9,7 @@
 
 namespace azino {
 namespace txindex {
-class DepReporter;
+class Dependence;
 class TxIndex;
 
 class TxOpServiceImpl : public TxOpService {

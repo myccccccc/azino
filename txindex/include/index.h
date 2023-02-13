@@ -6,10 +6,11 @@
 #include <unordered_map>
 
 #include "azino/kv.h"
+#include "depedence.h"
 #include "gflags/gflags.h"
+#include "metric.h"
 #include "mvccvalue.h"
-#include "persistor.h"
-#include "reporter.h"
+#include "persist.h"
 #include "service/kv.pb.h"
 #include "service/tx.pb.h"
 
@@ -72,13 +73,12 @@ class KVBucket {
     ~KVBucket() = default;
 
     TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid,
-                         std::function<void()> callback, Deps& deps);
+                         std::function<void()> callback, Deps& deps,
+                         bool& is_lock_update);
     TxOpStatus WriteIntent(const std::string& key, const Value& v,
                            const TxIdentifier& txid,
-                           std::function<void()> callback, Deps& deps);
-    TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,
-                     const std::string& key, const Value& v,
-                     std::function<void()> callback, Deps& deps);
+                           std::function<void()> callback, Deps& deps,
+                           bool& is_lock_update);
     TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
@@ -88,6 +88,11 @@ class KVBucket {
     int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
 
    private:
+    TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,
+                     const std::string& key, const Value& v,
+                     std::function<void()> callback, Deps& deps,
+                     bool& is_lock_update);
+
     std::unordered_map<std::string, MVCCValue> _kvs;
     bthread::Mutex _latch;
 };
@@ -114,11 +119,13 @@ class KVRegion : public txindex::TxIndex {
 
     inline std::vector<KVBucket>& KVBuckets() { return _kvbs; }
 
+    inline std::string Describe() { return "tmp-kvregion-name"; }
+
    private:
-    friend class Persistor;
     std::vector<KVBucket> _kvbs;
-    Persistor _persistor;
-    DepReporter _deprpt;
+    RegionPersist _persistor;
+    Dependence _deprpt;
+    RegionMetric _metric;
 };
 
 }  // namespace txindex
