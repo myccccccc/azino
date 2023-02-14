@@ -3,8 +3,9 @@
 
 #include <butil/macros.h>
 
-#include <unordered_map>
+#include <map>
 
+#include "azino/comparator.h"
 #include "azino/kv.h"
 #include "azino/options.h"
 #include "service/kv.pb.h"
@@ -17,6 +18,8 @@ typedef struct TxWrite {
     Value value;
     TxWriteStatus status = NONE;
 } TxWrite;
+
+typedef std::map<UserKey, TxWrite, BitWiseComparator> Buffer;
 
 class TxWriteBuffer {
    public:
@@ -35,18 +38,14 @@ class TxWriteBuffer {
         _m[key].value.set_content(value);
     }
 
-    std::unordered_map<UserKey, TxWrite>::iterator begin() {
-        return _m.begin();
-    }
+    Buffer::iterator begin() { return _m.begin(); }
 
-    std::unordered_map<UserKey, TxWrite>::iterator end() { return _m.end(); }
+    Buffer::iterator end() { return _m.end(); }
 
-    std::unordered_map<UserKey, TxWrite>::iterator find(const UserKey& key) {
-        return _m.find(key);
-    }
+    Buffer::iterator find(const UserKey& key) { return _m.find(key); }
 
    private:
-    std::unordered_map<UserKey, TxWrite> _m;
+    Buffer _m;
 };
 }  // namespace azino
 #endif  // AZINO_SDK_INCLUDE_TXWRITEBUFFER_H
