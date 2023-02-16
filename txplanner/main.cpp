@@ -26,14 +26,14 @@ int main(int argc, char* argv[]) {
     brpc::Server server;
     azino::txplanner::TxIDTable tt;
     azino::PartitionConfigMap pcm;
-    pcm.insert(
-        std::make_pair(azino::Range("", "a", 0, 0), FLAGS_txindex_addrs));
-    pcm.insert(
-        std::make_pair(azino::Range("a", "b", 1, 0), FLAGS_txindex_addrs));
-    pcm.insert(
-        std::make_pair(azino::Range("b", "b", 1, 1), FLAGS_txindex_addrs));
-    pcm.insert(
-        std::make_pair(azino::Range("b", "", 0, 0), FLAGS_txindex_addrs));
+    pcm.insert(std::make_pair(azino::Range("", "a", 0, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("a", "b", 1, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("b", "b", 1, 1),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("b", "", 0, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
     azino::txplanner::PartitionManager pm(
         azino::Partition(pcm, FLAGS_storage_addr));
 
