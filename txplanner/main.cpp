@@ -15,10 +15,6 @@ DECLARE_bool(crash_on_fatal_log);
 #include "service.h"
 #include "txidtable.h"
 
-namespace azino {
-namespace storage {}  // namespace storage
-}  // namespace azino
-
 int main(int argc, char* argv[]) {
     logging::FLAGS_crash_on_fatal_log = true;
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
