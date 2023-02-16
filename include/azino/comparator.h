@@ -8,7 +8,8 @@
 namespace azino {
 class BitWiseComparator {
    public:
-    inline bool operator()(const std::string& lhs, const std::string& rhs) {
+    inline bool operator()(const std::string& lhs,
+                           const std::string& rhs) const {
         const size_t min_len = std::min(lhs.size(), rhs.size());
         int r = memcmp(lhs.data(), rhs.data(), min_len);
         if (r == 0) {
