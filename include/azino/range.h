@@ -65,7 +65,7 @@ class RangeComparator {
         if (cmp(lhs.right, rhs.left)) {
             return true;
         } else if (lhs.right == rhs.left &&
-                   lhs.right_include < rhs.left_include) {
+                   !(lhs.right_include > 0 && rhs.left_include > 0)) {
             return true;
         }
         return false;
