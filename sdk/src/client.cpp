@@ -336,7 +336,7 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
          iter->second.status < TxWriteStatus::LOCKED)) {
         // Pessimistic
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
+        azino::txindex::TxOpService_Stub stub(Route(key).get());
 
         brpc::Controller cntl;
         azino::txindex::WriteLockRequest req;
