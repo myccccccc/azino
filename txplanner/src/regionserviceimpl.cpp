@@ -67,7 +67,9 @@ void RegionServiceImpl::RegionMetric(
     ::google::protobuf::RpcController* controller,
     const ::azino::txplanner::RegionMetricRequest* request,
     ::azino::txplanner::RegionMetricResponse* response,
-    ::google::protobuf::Closure* done) {}
+    ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard done_guard(done);
+}
 
 }  // namespace txplanner
 }  // namespace azino
