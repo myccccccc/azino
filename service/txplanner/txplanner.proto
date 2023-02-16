@@ -4,6 +4,7 @@ package azino.txplanner;
 option cc_generic_services = true;
 
 import "service/tx.proto";
+import "service/partition.proto";
 
 message BeginTxRequest {
 
@@ -11,8 +12,7 @@ message BeginTxRequest {
 
 message BeginTxResponse {
   optional azino.TxIdentifier txid = 1;
-  repeated string txindex_addrs = 2; // txindex addresses in form of "0.0.0.0:8000"
-  optional string storage_addr = 3; // storage addresses in form of "0.0.0.0:8000"
+  optional azino.PartitionPB partition = 2;
 }
 
 message CommitTxRequest {

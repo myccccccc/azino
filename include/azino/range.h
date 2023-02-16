@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include "comparator.h"
+#include "service/partition.pb.h"
 
 namespace azino {
 class RangeComparator;
@@ -30,6 +31,20 @@ class Range {
         ss << left << ", " << right;
         ss << (right_include > 0 ? "]" : ")");
         return ss.str();
+    }
+
+    RangePB ToPB() const {
+        RangePB pb;
+        pb.set_left(left);
+        pb.set_right(right);
+        pb.set_left_include(left_include);
+        pb.set_right_include(right_include);
+        return pb;
+    }
+
+    static Range FromPB(const RangePB& pb) {
+        return Range(pb.left(), pb.right(), pb.left_include(),
+                     pb.right_include());
     }
 
    private:

@@ -7,6 +7,7 @@
 
 #include "kv.h"
 #include "options.h"
+#include "range.h"
 #include "status.h"
 
 #ifndef AZINO_INCLUDE_CLIENT_H
@@ -22,9 +23,10 @@ class TxIdentifier;
 class TxWriteBuffer;
 
 typedef std::unique_ptr<brpc::ChannelOptions> ChannelOptionsPtr;
-typedef std::unique_ptr<brpc::Channel> ChannelPtr;
+typedef std::shared_ptr<brpc::Channel> ChannelPtr;
 typedef std::unique_ptr<TxIdentifier> TxIdentifierPtr;
 typedef std::unique_ptr<TxWriteBuffer> TxWriteBufferPtr;
+typedef std::map<std::string, ChannelPtr> ChannelTable;
 
 // not thread safe, and it is not reusable.
 class Transaction {
@@ -51,11 +53,13 @@ class Transaction {
     Status PreputAll();
     Status CommitAll();
     Status AbortAll();
+    ChannelPtr& Route(const std::string& key);
     Options _options;
     ChannelOptionsPtr _channel_options;
     ChannelPtr _txplanner;
     ChannelPtr _storage;
-    std::vector<ChannelPtr> _txindexs;
+    ChannelTable _channel_table;
+    std::map<Range, ChannelPtr, RangeComparator> _txindexs;
     TxIdentifierPtr _txid;
     TxWriteBufferPtr _txwritebuffer;
 };

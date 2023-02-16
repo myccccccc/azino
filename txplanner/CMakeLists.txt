@@ -7,7 +7,8 @@ add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/src/txserviceimpl.cpp
                                    ${PROJECT_SOURCE_DIR}/src/txidtable.cpp
                                    ${PROJECT_SOURCE_DIR}/src/txid.cpp
                                    ${PROJECT_SOURCE_DIR}/src/gc.cpp
-                                   ${PROJECT_SOURCE_DIR}/src/metric.cpp)
+                                   ${PROJECT_SOURCE_DIR}/src/metric.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/partition_manager.cpp)
 
 add_library(azino_txplanner::lib ALIAS ${PROJECT_NAME})
 

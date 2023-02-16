@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "partition_manager.h"
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 #include "txidtable.h"
@@ -13,8 +14,7 @@ class AscendingTimer;
 
 class TxServiceImpl : public TxService {
    public:
-    TxServiceImpl(const std::vector<std::string>& txindex_addrs,
-                  const std::string& storage_addr, TxIDTable* tt);
+    TxServiceImpl(TxIDTable* tt, PartitionManager* pm);
     ~TxServiceImpl();
 
     virtual void BeginTx(::google::protobuf::RpcController* controller,
@@ -41,9 +41,7 @@ class TxServiceImpl : public TxService {
    private:
     std::unique_ptr<AscendingTimer> _timer;
     TxIDTable* _tt;
-    std::vector<std::string>
-        _txindex_addrs;         // txindex addresses in form of "0.0.0.0:8000"
-    std::string _storage_addr;  // storage addresses in form of "0.0.0.0:8000"
+    PartitionManager* _pm;
 };
 
 class RegionServiceImpl : public RegionService {

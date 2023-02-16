@@ -25,16 +25,19 @@ int main(int argc, char* argv[]) {
 
     brpc::Server server;
     azino::txplanner::TxIDTable tt;
+    azino::PartitionConfigMap pcm;
+    pcm.insert(
+        std::make_pair(azino::Range("", "a", 0, 0), FLAGS_txindex_addrs));
+    pcm.insert(
+        std::make_pair(azino::Range("a", "b", 1, 0), FLAGS_txindex_addrs));
+    pcm.insert(
+        std::make_pair(azino::Range("b", "b", 1, 1), FLAGS_txindex_addrs));
+    pcm.insert(
+        std::make_pair(azino::Range("b", "", 0, 0), FLAGS_txindex_addrs));
+    azino::txplanner::PartitionManager pm(
+        azino::Partition(pcm, FLAGS_storage_addr));
 
-    std::string txindex_addr;
-    std::vector<std::string> txindex_addrs;
-    std::istringstream iss(FLAGS_txindex_addrs);
-    while (iss >> txindex_addr) {
-        txindex_addrs.push_back(txindex_addr);
-    }
-
-    azino::txplanner::TxServiceImpl tx_service_impl(txindex_addrs,
-                                                    FLAGS_storage_addr, &tt);
+    azino::txplanner::TxServiceImpl tx_service_impl(&tt, &pm);
     if (server.AddService(&tx_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
         0) {
         LOG(FATAL) << "Fail to add tx_service_impl";
