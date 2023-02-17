@@ -6,23 +6,72 @@
 #include <unordered_map>
 
 #include "azino/kv.h"
+#include "azino/partition.h"
+#include "azino/range.h"
+#include "bthread/bthread.h"
 #include "depedence.h"
 #include "gflags/gflags.h"
 #include "metric.h"
 #include "mvccvalue.h"
+#include "partition_manager.h"
 #include "persist.h"
 #include "service/kv.pb.h"
 #include "service/tx.pb.h"
 
 DECLARE_int32(latch_bucket_num);
+DECLARE_string(txindex_addr);
+
+/*
+#define BTHREAD_RWLOCK_INIT(lock)                            \
+    do {                                                     \
+        int ec = bthread_rwlock_init(&lock, NULL);           \
+        if (ec != 0) {                                       \
+            throw std::system_error(                         \
+                std::error_code(ec, std::system_category()), \
+                "bthread_rwlock_init failed");               \
+        }                                                    \
+    } while (0);
+
+#define BTHREAD_RWLOCK_RDLOCK(lock)                          \
+    do {                                                     \
+        int ec = bthread_rwlock_rdlock(&lock);               \
+        if (ec != 0) {                                       \
+            throw std::system_error(                         \
+                std::error_code(ec, std::system_category()), \
+                "bthread_rwlock_rdlock failed");             \
+        }                                                    \
+    } while (0);
+
+#define BTHREAD_RWLOCK_WRLOCK(lock)                          \
+    do {                                                     \
+        int ec = bthread_rwlock_wrlock(&lock);               \
+        if (ec != 0) {                                       \
+            throw std::system_error(                         \
+                std::error_code(ec, std::system_category()), \
+                "bthread_rwlock_wrlock failed");             \
+        }                                                    \
+    } while (0);
+
+#define BTHREAD_RWLOCK_UNLOCK(lock)                          \
+    do {                                                     \
+        int ec = bthread_rwlock_unlock(&lock);               \
+        if (ec != 0) {                                       \
+            throw std::system_error(                         \
+                std::error_code(ec, std::system_category()), \
+                "bthread_rwlock_unlock failed");             \
+        }                                                    \
+    } while (0);
+*/
 
 namespace azino {
 namespace txindex {
 class KVRegion;
+typedef std::shared_ptr<KVRegion> KVRegionPtr;
+typedef std::map<Range, KVRegionPtr, RangeComparator> RegionPartitionTable;
 
 class TxIndex {
    public:
-    TxIndex(brpc::Channel* storage_channel, brpc::Channel* txplaner_channel);
+    TxIndex(brpc::Channel* txplaner_channel);
     TxIndex() = default;
     virtual ~TxIndex() = default;
     DISALLOW_ASSIGN(TxIndex);
@@ -61,9 +110,20 @@ class TxIndex {
                             std::function<void()> callback);
 
    private:
-    brpc::Channel* _storage_channel;
+    KVRegionPtr route(const std::string& key);
+    void init_region_table(const Partition& p);
+    void init_storage(const Partition& p);
+
+    brpc::Channel _storage_channel;
     brpc::Channel* _txplaner_channel;
-    std::unique_ptr<KVRegion> _region;
+
+    //    bthread_rwlock_t
+    //        _region_table_lock;  // acquire read lock when route, acquire
+    //        write lock
+    //                             // when changing the range partition
+    RegionPartitionTable _region_table;
+
+    PartitionManager _pm;
 };
 
 class KVBucket {
@@ -97,31 +157,29 @@ class KVBucket {
     bthread::Mutex _latch;
 };
 
-class KVRegion : public txindex::TxIndex {
+class KVRegion {
    public:
-    KVRegion(brpc::Channel* storage_channel, brpc::Channel* txplaner_channel);
+    KVRegion(const Range& range, brpc::Channel* storage_channel,
+             brpc::Channel* txplaner_channel);
     DISALLOW_COPY_AND_ASSIGN(KVRegion);
     ~KVRegion();
 
-    virtual TxOpStatus WriteLock(const std::string& key,
-                                 const TxIdentifier& txid,
-                                 std::function<void()> callback) override;
-    virtual TxOpStatus WriteIntent(const std::string& key, const Value& value,
-                                   const TxIdentifier& txid,
-                                   std::function<void()> callback) override;
-    virtual TxOpStatus Clean(const std::string& key,
-                             const TxIdentifier& txid) override;
-    virtual TxOpStatus Commit(const std::string& key,
-                              const TxIdentifier& txid) override;
-    virtual TxOpStatus Read(const std::string& key, Value& v,
-                            const TxIdentifier& txid,
-                            std::function<void()> callback) override;
+    TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid,
+                         std::function<void()> callback);
+    TxOpStatus WriteIntent(const std::string& key, const Value& value,
+                           const TxIdentifier& txid,
+                           std::function<void()> callback);
+    TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
+    TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
+    TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
+                    std::function<void()> callback);
 
     inline std::vector<KVBucket>& KVBuckets() { return _kvbs; }
 
-    inline std::string Describe() { return "tmp-kvregion-name"; }
+    inline std::string Describe() { return _range.Describe(); }
 
    private:
+    Range _range;
     std::vector<KVBucket> _kvbs;
     RegionPersist _persistor;
     Dependence _deprpt;

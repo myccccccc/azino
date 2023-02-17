@@ -9,6 +9,7 @@ message TxOpStatus {
     WriteBlock = 3;
     ReadBlock = 4;
     NotExist = 5;
+    PartitionErr = 6;
   };
   optional Code error_code = 1 [default = Ok];
   optional string error_message = 2;

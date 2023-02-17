@@ -45,7 +45,14 @@ int main(int argc, char* argv[]) {
     azino::txplanner::RegionServiceImpl region_service_impl(&tt);
     if (server.AddService(&region_service_impl,
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        LOG(FATAL) << "Fail to add dep_service_impl";
+        LOG(FATAL) << "Fail to add region_service_impl";
+        return -1;
+    }
+
+    azino::txplanner::PartitionServiceImpl partition_service_impl(&pm);
+    if (server.AddService(&partition_service_impl,
+                          brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+        LOG(FATAL) << "Fail to add partition_service_impl";
         return -1;
     }
 

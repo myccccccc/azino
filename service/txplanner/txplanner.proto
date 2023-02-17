@@ -82,3 +82,15 @@ service RegionService {
   rpc GetMinATS(GetMinATSRequest) returns (GetMinATSResponse);
   rpc RegionMetric(RegionMetricRequest) returns (RegionMetricResponse);
 }
+
+message GetPartitionRequest {
+
+}
+
+message GetPartitionResponse {
+  optional azino.PartitionPB partition = 1;
+}
+
+service PartitionService {
+  rpc GetPartition(GetPartitionRequest) returns (GetPartitionResponse);
+}

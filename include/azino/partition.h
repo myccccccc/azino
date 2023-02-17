@@ -15,7 +15,7 @@ typedef std::string Storage;  // storage addresses in form of "0.0.0.0:8000"
 class PartitionConfig {
    public:
     PartitionConfig(TxIndex t) : txindex(std::move(t)) {}
-    TxIndex GetTxIndex() { return txindex; }
+    TxIndex GetTxIndex() const { return txindex; }
 
     PartitionConfigPB ToPB() const {
         PartitionConfigPB pb;
@@ -35,12 +35,13 @@ typedef std::map<Range, PartitionConfig, RangeComparator> PartitionConfigMap;
 
 class Partition {
    public:
+    Partition() = default;
     Partition(PartitionConfigMap pcm, Storage s)
         : partition_configmap(std::move(pcm)), storage(std::move(s)) {}
-    inline PartitionConfigMap& GetPartitionConfigMap() {
+    inline const PartitionConfigMap& GetPartitionConfigMap() const {
         return partition_configmap;
     }
-    inline Storage GetStorage() { return storage; }
+    inline const Storage GetStorage() const { return storage; }
 
     PartitionPB ToPB() const {
         PartitionPB pb;

@@ -69,6 +69,21 @@ class RegionServiceImpl : public RegionService {
     TxIDTable* _tt;
 };
 
+class PartitionServiceImpl : public PartitionService {
+   public:
+    PartitionServiceImpl(PartitionManager* pm);
+    ~PartitionServiceImpl();
+
+    virtual void GetPartition(
+        ::google::protobuf::RpcController* controller,
+        const ::azino::txplanner::GetPartitionRequest* request,
+        ::azino::txplanner::GetPartitionResponse* response,
+        ::google::protobuf::Closure* done) override;
+
+   private:
+    PartitionManager* _pm;
+};
+
 }  // namespace txplanner
 }  // namespace azino
 #endif  // AZINO_TXPLANNER_INCLUDE_SERVICE_H
