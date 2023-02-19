@@ -17,9 +17,10 @@ DEFINE_int32(latch_bucket_num, 128, "latch buckets number");
 namespace azino {
 namespace txindex {
 
-KVRegion::KVRegion(brpc::Channel* storage_channel,
+KVRegion::KVRegion(const Range& range, brpc::Channel* storage_channel,
                    brpc::Channel* txplaner_channel)
-    : _kvbs(FLAGS_latch_bucket_num),
+    : _range(range),
+      _kvbs(FLAGS_latch_bucket_num),
       _persistor(this, storage_channel, txplaner_channel),
       _deprpt(this, txplaner_channel),
       _metric(this, txplaner_channel) {

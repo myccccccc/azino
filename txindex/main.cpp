@@ -7,16 +7,11 @@
 #include "service.h"
 
 DEFINE_string(txindex_addr, "0.0.0.0:8002", "Addresses of txindex");
-DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
-
-namespace azino {
-namespace txindex {}
-}  // namespace azino
 
 int main(int argc, char* argv[]) {
     logging::FLAGS_crash_on_fatal_log = true;
@@ -24,19 +19,14 @@ int main(int argc, char* argv[]) {
 
     brpc::Server server;
     brpc::ServerOptions server_options;
-    brpc::Channel storage_channel;
     brpc::Channel txplanner_channel;
     brpc::ChannelOptions options;
 
-    if (storage_channel.Init(FLAGS_storage_addr.c_str(), &options) != 0) {
-        LOG(FATAL) << "Fail to initialize storage channel";
-    }
     if (txplanner_channel.Init(FLAGS_txplanner_addr.c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to initialize txplanner channel";
     }
 
-    auto txindex =
-        new azino::txindex::TxIndex(&storage_channel, &txplanner_channel);
+    auto txindex = new azino::txindex::TxIndex(&txplanner_channel);
 
     azino::txindex::TxOpServiceImpl tx_op_service_impl(txindex);
     if (server.AddService(&tx_op_service_impl,

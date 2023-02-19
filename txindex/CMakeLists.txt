@@ -8,7 +8,9 @@ add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/src/kvregion.cpp
                                    ${PROJECT_SOURCE_DIR}/src/depedence.cpp
                                    ${PROJECT_SOURCE_DIR}/src/kvbucket.cpp
                                    ${PROJECT_SOURCE_DIR}/src/mvccvalue.cpp
-                                   ${PROJECT_SOURCE_DIR}/src/txindex.cpp src/metric.cpp)
+                                   ${PROJECT_SOURCE_DIR}/src/txindex.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/metric.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/partition_manager.cpp)
 
 add_library(azino_txindex::lib ALIAS ${PROJECT_NAME})
 

@@ -3,6 +3,7 @@
 #include <brpc/channel.h>
 #include <butil/hash.h>
 
+#include "azino/partition.h"
 #include "service/storage/storage.pb.h"
 #include "service/tx.pb.h"
 #include "service/txindex/txindex.pb.h"
@@ -84,34 +85,36 @@ Status Transaction::Begin() {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::TxPlannerErr(ss.str());
     }
-    if (!resp.has_storage_addr()) {
-        ss << " Missing storage addr";
-        return Status::TxPlannerErr(ss.str());
-    }
-    if (resp.txindex_addrs_size() == 0) {
-        ss << " Missing txindex addrs";
-        return Status::TxPlannerErr(ss.str());
-    }
+    auto partition = Partition::FromPB(resp.partition());
 
     // init storage channel
     auto* channel = new brpc::Channel();
-    err = channel->Init(resp.storage_addr().c_str(), _channel_options.get());
+    err = channel->Init(partition.GetStorage().c_str(), _channel_options.get());
     if (err) {
-        LOG_CHANNEL_ERROR(resp.storage_addr(), err, ss)
+        LOG_CHANNEL_ERROR(partition.GetStorage().c_str(), err, ss)
         return Status::NetworkErr(ss.str());
     }
     _storage.reset(channel);
 
     // init txindex channels
-    for (int i = 0; i < resp.txindex_addrs_size(); i++) {
-        auto* txindex_channel = new brpc::Channel();
-        err = txindex_channel->Init(resp.txindex_addrs(i).c_str(),
-                                    _channel_options.get());
-        if (err) {
-            LOG_CHANNEL_ERROR(resp.txindex_addrs(i), err, ss)
-            return Status::NetworkErr(ss.str());
+    for (auto iter = partition.GetPartitionConfigMap().begin();
+         iter != partition.GetPartitionConfigMap().end(); iter++) {
+        auto txindex_addr = iter->second.GetTxIndex();
+        if (_channel_table.find(txindex_addr) == _channel_table.end()) {
+            ChannelPtr txindex_channel(new brpc::Channel());
+            err = txindex_channel->Init(txindex_addr.c_str(),
+                                        _channel_options.get());
+            if (err) {
+                LOG_CHANNEL_ERROR(txindex_addr, err, ss)
+                return Status::NetworkErr(ss.str());
+            }
+            _channel_table.insert(
+                std::make_pair(txindex_addr, txindex_channel));
+            _txindexs.insert(std::make_pair(iter->first, txindex_channel));
+        } else {
+            _txindexs.insert(std::make_pair(
+                iter->first, _channel_table.find(txindex_addr)->second));
         }
-        _txindexs.emplace_back(txindex_channel);
     }
 
     return Status::Ok();
@@ -203,9 +206,7 @@ Status Transaction::PreputAll() {
          iter++) {
         assert(iter->second.status < TxWriteStatus::PREPUTED);
 
-        // todo: use a wrapper
-        auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
-        azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
 
         brpc::Controller cntl;
         azino::txindex::WriteIntentRequest req;
@@ -245,9 +246,7 @@ Status Transaction::CommitAll() {
          iter++) {
         assert(iter->second.status == TxWriteStatus::PREPUTED);
 
-        // todo: use a wrapper
-        auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
-        azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
 
         brpc::Controller cntl;
         azino::txindex::CommitRequest req;
@@ -287,9 +286,7 @@ Status Transaction::AbortAll() {
             continue;
         }
 
-        // todo: use a wrapper
-        auto txindex_num = butil::Hash(iter->first) % _txindexs.size();
-        azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
 
         brpc::Controller cntl;
         azino::txindex::CleanRequest req;
@@ -339,9 +336,7 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
          iter->second.status < TxWriteStatus::LOCKED)) {
         // Pessimistic
 
-        // todo: use a wrapper
-        auto txindex_num = butil::Hash(key) % _txindexs.size();
-        azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+        azino::txindex::TxOpService_Stub stub(Route(key).get());
 
         brpc::Controller cntl;
         azino::txindex::WriteLockRequest req;
@@ -395,9 +390,7 @@ Status Transaction::Get(const ReadOptions& options, const UserKey& key,
         }
     }
 
-    // todo: use a wrapper
-    auto txindex_num = butil::Hash(key) % _txindexs.size();
-    azino::txindex::TxOpService_Stub stub(_txindexs[txindex_num].get());
+    azino::txindex::TxOpService_Stub stub(Route(key).get());
 
     brpc::Controller cntl;
     azino::txindex::ReadRequest req;
@@ -464,5 +457,14 @@ readStorage:
                << " error message: " << storage_resp.status().error_message();
             return Status::StorageErr(storage_ss.str());
     }
+}
+
+ChannelPtr& Transaction::Route(const std::string& key) {
+    auto key_range = azino::Range(key, key, 1, 1);
+    auto iter = _txindexs.lower_bound(key_range);
+    if (iter == _txindexs.end() || !iter->first.Contains(key_range)) {
+        LOG(FATAL) << "Fail to route key:" << key;
+    }
+    return iter->second;
 }
 }  // namespace azino

@@ -22,12 +22,8 @@ class AscendingTimer {
     bthread::Mutex _m;
 };
 
-TxServiceImpl::TxServiceImpl(const std::vector<std::string> &txindex_addrs,
-                             const std::string &storage_adr, TxIDTable *tt)
-    : _timer(new AscendingTimer(MIN_TIMESTAMP)),
-      _tt(tt),
-      _txindex_addrs(txindex_addrs),
-      _storage_addr(storage_adr) {}
+TxServiceImpl::TxServiceImpl(TxIDTable *tt, PartitionManager *pm)
+    : _timer(new AscendingTimer(MIN_TIMESTAMP)), _tt(tt), _pm(pm) {}
 
 TxServiceImpl::~TxServiceImpl() {}
 
@@ -42,11 +38,8 @@ void TxServiceImpl::BeginTx(::google::protobuf::RpcController *controller,
     auto txidptr = _tt->BeginTx(start_ts);
     auto txid = new TxIdentifier(txidptr->get_txid());
     response->set_allocated_txid(txid);
-
-    for (std::string &addr : _txindex_addrs) {
-        response->add_txindex_addrs(addr);
-    }
-    response->set_storage_addr(_storage_addr);
+    auto partition = new PartitionPB(_pm->GetPartition().ToPB());
+    response->set_allocated_partition(partition);
 
     LOG(INFO) << cntl->remote_side() << " tx: " << txid->ShortDebugString()
               << " is going to begin.";

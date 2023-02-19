@@ -15,26 +15,27 @@ DECLARE_bool(crash_on_fatal_log);
 #include "service.h"
 #include "txidtable.h"
 
-namespace azino {
-namespace storage {}  // namespace storage
-}  // namespace azino
-
 int main(int argc, char* argv[]) {
     logging::FLAGS_crash_on_fatal_log = true;
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
 
     brpc::Server server;
     azino::txplanner::TxIDTable tt;
+    azino::PartitionConfigMap pcm;
+    pcm.insert(std::make_pair(azino::Range("", "b", 0, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("b", "c", 1, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("c", "c", 1, 1),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("c", "d", 0, 1),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    pcm.insert(std::make_pair(azino::Range("d", "", 0, 0),
+                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    azino::txplanner::PartitionManager pm(
+        azino::Partition(pcm, FLAGS_storage_addr));
 
-    std::string txindex_addr;
-    std::vector<std::string> txindex_addrs;
-    std::istringstream iss(FLAGS_txindex_addrs);
-    while (iss >> txindex_addr) {
-        txindex_addrs.push_back(txindex_addr);
-    }
-
-    azino::txplanner::TxServiceImpl tx_service_impl(txindex_addrs,
-                                                    FLAGS_storage_addr, &tt);
+    azino::txplanner::TxServiceImpl tx_service_impl(&tt, &pm);
     if (server.AddService(&tx_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
         0) {
         LOG(FATAL) << "Fail to add tx_service_impl";
@@ -44,7 +45,14 @@ int main(int argc, char* argv[]) {
     azino::txplanner::RegionServiceImpl region_service_impl(&tt);
     if (server.AddService(&region_service_impl,
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
-        LOG(FATAL) << "Fail to add dep_service_impl";
+        LOG(FATAL) << "Fail to add region_service_impl";
+        return -1;
+    }
+
+    azino::txplanner::PartitionServiceImpl partition_service_impl(&pm);
+    if (server.AddService(&partition_service_impl,
+                          brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+        LOG(FATAL) << "Fail to add partition_service_impl";
         return -1;
     }
 
