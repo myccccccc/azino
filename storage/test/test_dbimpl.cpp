@@ -102,6 +102,22 @@ TEST_F(DBImplTest, mvcc) {
               storage->Delete("seek1").error_code());
     ASSERT_TRUE(storage->Seek("seek", seeked_key, seeked_value).error_code() ==
                 azino::storage::StorageStatus_Code_NotFound);
+
+    std::vector<std::string> res;
+    std::vector<azino::TimeStamp> ress;
+    ASSERT_TRUE(storage->MVCCPut("scan1", 1, "1").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_TRUE(storage->MVCCPut("scan1", 2, "2").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_TRUE(storage->MVCCPut("scan1", 3, "3").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_TRUE(storage->MVCCPut("scan2", 2, "2").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok,
+              storage->MVCCScan("scan1", "scan3", 2, res, ress).error_code());
+    ASSERT_EQ(2, res.size());
+    ASSERT_EQ("2", res[0]);
+    ASSERT_EQ("2", res[1]);
 }
 
 TEST_F(DBImplTest, mvccbatch) {

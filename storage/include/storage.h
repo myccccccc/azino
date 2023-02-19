@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 
+#include "azino/comparator.h"
 #include "azino/kv.h"
 #include "service/storage/storage.pb.h"
 #include "utils.h"
@@ -139,6 +140,92 @@ class Storage {
         } else {
             return ss;
         }
+    }
+
+    virtual StorageStatus MVCCNextKey(const std::string key,
+                                      std::string& next_key) {
+        auto internal_key = InternalKey(key, MIN_TIMESTAMP, false);
+        std::string found_key, found_value;
+        auto ss = Seek(internal_key.Encode(), found_key, found_value);
+        if (ss.error_code() == StorageStatus::Ok) {
+            auto found_internal_key = InternalKey(found_key);
+            bool isValid = found_internal_key.Valid();
+            if (!isValid) {
+                ss.set_error_code(StorageStatus_Code_Corruption);
+                std::stringstream str;
+                str << " Fail to find mvcc key: " << key
+                    << " read ts: " << MIN_TIMESTAMP;
+                ss.set_error_message(str.str());
+                return ss;
+            }
+            next_key = found_internal_key.UserKey();
+        }
+
+        return ss;
+    }
+
+    virtual StorageStatus MVCCScan(const std::string& left_key,
+                                   const std::string& right_key, TimeStamp ts,
+                                   std::vector<std::string>& value,
+                                   std::vector<TimeStamp>& seeked_ts) {
+        StorageStatus ss;
+        BitWiseComparator cmp;
+        auto next_key = left_key;
+        while (cmp(next_key, right_key)) {
+            auto internal_key = InternalKey(next_key, ts, false);
+            std::string found_key, found_value;
+            ss = Seek(internal_key.Encode(), found_key, found_value);
+
+            switch (ss.error_code()) {
+                case StorageStatus::Ok: {
+                    auto found_internal_key = InternalKey(found_key);
+                    bool isValid = found_internal_key.Valid();
+                    bool isMatch = found_internal_key.UserKey() == next_key;
+                    bool isDeleted = found_internal_key.IsDelete();
+                    if (!isValid) {
+                        ss.set_error_code(StorageStatus_Code_Corruption);
+                        std::stringstream str;
+                        str << " Fail to find mvcc key: " << next_key
+                            << " read ts: " << ts;
+                        ss.set_error_message(str.str());
+                        goto out;
+                    }
+                    if (!isMatch) {
+                        next_key = found_internal_key.UserKey();
+                        continue;
+                    }
+                    if (!isDeleted) {
+                        value.push_back(found_value);
+                        seeked_ts.push_back(found_internal_key.TS());
+                    }
+                    ss = MVCCNextKey(next_key, next_key);
+                    if (ss.error_code() != StorageStatus::Ok) {
+                        if (ss.error_code() == StorageStatus::NotFound) {
+                            goto ok_out;
+                        } else {
+                            goto out;
+                        }
+                    }
+                    break;
+                }
+                case StorageStatus::NotFound: {
+                    goto ok_out;
+                }
+                default: {
+                    goto out;
+                }
+            }
+        }
+
+    ok_out:
+        if (!value.empty()) {
+            ss.set_error_code(StorageStatus_Code_Ok);
+        } else {
+            ss.set_error_code(StorageStatus_Code_NotFound);
+        }
+
+    out:
+        return ss;
     }
 };
 
