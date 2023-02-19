@@ -9,6 +9,8 @@ extern "C" void* CallbackWrapper(void* arg) {
     return nullptr;
 }
 
+DECLARE_int32(region_metric_period_s);
+
 namespace azino {
 namespace txindex {
 
@@ -65,6 +67,23 @@ void MVCCValue::WakeUpWaiters() {
         }
     }
     _waiters.clear();
+}
+
+MVCCValue::MVCCValue()
+    : _lock(MVCCLock::None),
+      _lock_holder(),
+      _lock_value(),
+      _mvv(),
+      _write(),
+      _write_window(&_write, FLAGS_region_metric_period_s),
+      _write_error(),
+      _write_error_window(&_write_error, FLAGS_region_metric_period_s) {}
+
+void MVCCValue::RecordWrite(bool err) {
+    _write << 1;
+    if (err) {
+        _write_error << 1;
+    }
 }
 
 }  // namespace txindex

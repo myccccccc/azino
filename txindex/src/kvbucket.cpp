@@ -21,6 +21,7 @@
                << " value: " << iter->second->ShortDebugString();        \
             sts.set_error_code(TxOpStatus_Code_WriteTooLate);            \
             sts.set_error_message(ss.str());                             \
+            mv.RecordWrite(true);                                        \
             return sts;                                                  \
         }                                                                \
     } while (0);
@@ -229,6 +230,7 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
             ss << " conflict";
             sts.set_error_code(TxOpStatus_Code_WriteConflicts);
             sts.set_error_message(ss.str());
+            mv.RecordWrite(true);
             LOG(INFO) << ss.str();
             return sts;
         } else if (mv.LockType() == lock_type) {
@@ -257,6 +259,9 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
             assert(0);
     }
 
+    if (!is_lock_update) {
+        mv.RecordWrite();
+    }
     sts.set_error_code(TxOpStatus_Code_Ok);
     return sts;
 }

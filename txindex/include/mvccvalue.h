@@ -2,6 +2,7 @@
 #define AZINO_TXINDEX_INCLUDE_MVCCVALUE_H
 
 #include <butil/macros.h>
+#include <bvar/bvar.h>
 
 #include <functional>
 #include <string>
@@ -31,8 +32,7 @@ enum MVCCLock {
 
 class MVCCValue {
    public:
-    MVCCValue()
-        : _lock(MVCCLock::None), _lock_holder(), _lock_value(), _mvv() {}
+    MVCCValue();
     DISALLOW_COPY_AND_ASSIGN(MVCCValue);
     ~MVCCValue() = default;
     inline MVCCLock LockType() const { return _lock; }
@@ -44,6 +44,7 @@ class MVCCValue {
     void Clean();
     void Commit(const TxIdentifier& txid);
     inline MultiVersionValue& MVV() { return _mvv; }
+    void RecordWrite(bool err = false);
 
     MultiVersionValue::const_iterator LargestTSValue() const;
 
@@ -73,6 +74,13 @@ class MVCCValue {
     MultiVersionValue _mvv;
     ReaderMap _readers;
     std::vector<std::function<void()>> _waiters;
+
+    // key metrics
+    bvar::Adder<int> _write;  // total write num
+    bvar::Window<bvar::Adder<int>> _write_window;
+    bvar::Adder<int>
+        _write_error;  // write error(conflict, too late, block) num
+    bvar::Window<bvar::Adder<int>> _write_error_window;
 };
 }  // namespace txindex
 }  // namespace azino
