@@ -10,6 +10,11 @@ extern "C" void* CallbackWrapper(void* arg) {
 }
 
 DECLARE_int32(region_metric_period_s);
+DEFINE_double(alpha, 1,
+              "alpha hyper parameter when calculating keyPessimismDegree");
+static bvar::GFlag gflag_alpha("alpha");
+DEFINE_double(lambda, 0.6, "lambda hyper parameter");
+static bvar::GFlag gflag_lambda("lambda");
 
 namespace azino {
 namespace txindex {
@@ -77,13 +82,26 @@ MVCCValue::MVCCValue()
       _write(),
       _write_window(&_write, FLAGS_region_metric_period_s),
       _write_error(),
-      _write_error_window(&_write_error, FLAGS_region_metric_period_s) {}
+      _write_error_window(&_write_error, FLAGS_region_metric_period_s),
+      _tx_op_num(),
+      _tx_op_num_window(&_tx_op_num, FLAGS_region_metric_period_s),
+      _tx_op_after_write_num(),
+      _tx_op_after_write_num_window(&_tx_op_after_write_num,
+                                    FLAGS_region_metric_period_s) {}
 
 void MVCCValue::RecordWrite(bool err) {
     _write << 1;
     if (err) {
         _write_error << 1;
     }
+}
+
+double MVCCValue::PessimismDegree() {
+    auto c = (double)_write_error_window.get_value() /
+             (double)_write_window.get_value();
+    auto l = (double)_tx_op_after_write_num.get_value() /
+             (double)_tx_op_num_window.get_value();
+    return FLAGS_alpha * c + (1 - FLAGS_alpha) * l;
 }
 
 }  // namespace txindex
