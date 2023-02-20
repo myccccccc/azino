@@ -15,7 +15,8 @@ int main(int argc, char* argv[]) {
         azino::Transaction tx(options, FLAGS_txplanner_addr);
         while (true) {
             std::string action;
-            std::string key, value;
+            std::string key, right_key, value;
+            std::vector<std::string> values;
             std::cin >> action;
             if (action == "begin") {
                 auto sts = tx.Begin();
@@ -58,6 +59,14 @@ int main(int argc, char* argv[]) {
                 opts.type = azino::kOptimistic;
                 auto sts = tx.Delete(opts, key);
                 std::cout << sts.ToString() << std::endl;
+            } else if (action == "scan") {
+                std::cin >> key;
+                std::cin >> right_key;
+                auto sts = tx.Scan(key, right_key, values);
+                std::cout << sts.ToString() << std::endl;
+                for (auto& v : values) {
+                    std::cout << v << std::endl;
+                }
             } else {
                 std::getline(std::cin, action);
                 std::cout << "Use pput, oput, get or pdelete, odelete"
