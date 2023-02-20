@@ -20,44 +20,6 @@ StorageServiceImpl::StorageServiceImpl() : _storage(Storage::DefaultStorage()) {
     }
 }
 
-void StorageServiceImpl::Put(::google::protobuf::RpcController* controller,
-                             const ::azino::storage::PutRequest* request,
-                             ::azino::storage::PutResponse* response,
-                             ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    // brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    StorageStatus ss = _storage->Put(request->key(), request->value());
-    StorageStatus* ssts = new StorageStatus(ss);
-    response->set_allocated_status(ssts);
-}
-
-void StorageServiceImpl::Get(::google::protobuf::RpcController* controller,
-                             const ::azino::storage::GetRequest* request,
-                             ::azino::storage::GetResponse* response,
-                             ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    // brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    std::string value;
-    StorageStatus ss = _storage->Get(request->key(), value);
-    StorageStatus* ssts = new StorageStatus(ss);
-    response->set_allocated_status(ssts);
-    response->set_value(value);
-}
-
-void StorageServiceImpl::Delete(::google::protobuf::RpcController* controller,
-                                const ::azino::storage::DeleteRequest* request,
-                                ::azino::storage::DeleteResponse* response,
-                                ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    // brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    StorageStatus ss = _storage->Delete(request->key());
-    StorageStatus* ssts = new StorageStatus(ss);
-    response->set_allocated_status(ssts);
-}
-
 void StorageServiceImpl::MVCCPut(
     ::google::protobuf::RpcController* controller,
     const ::azino::storage::MVCCPutRequest* request,
@@ -137,6 +99,34 @@ void StorageServiceImpl::BatchStore(
     response->set_allocated_status(ssts);
 
     LOG(INFO) << " BATCHSTORE remote side: " << cntl->remote_side()
+              << " request: " << request->ShortDebugString()
+              << " error code: " << ss.error_code()
+              << " error message: " << ss.error_message();
+}
+
+void StorageServiceImpl::MVCCScan(
+    ::google::protobuf::RpcController* controller,
+    const ::azino::storage::MVCCScanRequest* request,
+    ::azino::storage::MVCCScanResponse* response,
+    ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard done_guard(done);
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
+    std::vector<std::string> key;
+    std::vector<std::string> value;
+    std::vector<TimeStamp> ts;
+    StorageStatus ss =
+        _storage->MVCCScan(request->left_key(), request->right_key(),
+                           request->ts(), key, value, ts);
+    StorageStatus* ssts = new StorageStatus(ss);
+    response->set_allocated_status(ssts);
+    for (size_t i = 0; i < value.size(); i++) {
+        response->add_key(key[i]);
+        response->add_value(value[i]);
+        response->add_ts(ts[i]);
+    }
+
+    LOG(INFO) << " MVCCScan remote side: " << cntl->remote_side()
               << " request: " << request->ShortDebugString()
               << " error code: " << ss.error_code()
               << " error message: " << ss.error_message();

@@ -467,4 +467,49 @@ ChannelPtr& Transaction::Route(const std::string& key) {
     }
     return iter->second;
 }
+
+Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
+                         std::vector<UserValue>& keys,
+                         std::vector<UserValue>& values) {
+    std::stringstream ss;
+    BEGIN_CHECK(scan)
+
+    azino::storage::StorageService_Stub storage_stub(_storage.get());
+    brpc::Controller storage_cntl;
+    azino::storage::MVCCScanRequest storage_req;
+    azino::storage::MVCCScanResponse storage_resp;
+    storage_req.set_left_key(left_key);
+    storage_req.set_right_key(right_key);
+    storage_req.set_ts(_txid->start_ts());
+    storage_stub.MVCCScan(&storage_cntl, &storage_req, &storage_resp, nullptr);
+    std::stringstream storage_ss;
+    if (storage_cntl.Failed()) {
+        LOG_CONTROLLER_ERROR(storage_cntl, storage_ss)
+        return Status::NetworkErr(storage_ss.str());
+    }
+
+    LOG_SDK(storage_cntl, storage_req, storage_resp, Scan_from_storage)
+
+    // TODO: merge with data in _txwritebuffer
+    switch (storage_resp.status().error_code()) {
+        case storage::StorageStatus_Code_Ok:
+            ss << " Find in Storage LeftKey: " << left_key
+               << " RightKey: " << right_key;
+            for (int i = 0; i < storage_resp.value_size(); i++) {
+                keys.push_back(storage_resp.key(i));
+                values.push_back(storage_resp.value(i));
+            }
+            return Status::Ok(storage_ss.str());
+        case storage::StorageStatus_Code_NotFound:
+            ss << " Find in Storage LeftKey: " << left_key
+               << " RightKey: " << right_key << " No Value";
+            return Status::NotFound(storage_ss.str());
+        default:
+            ss << " Find in Storage LeftKey: " << left_key
+               << " RightKey: " << right_key
+               << " error code: " << storage_resp.status().error_code()
+               << " error message: " << storage_resp.status().error_message();
+            return Status::StorageErr(storage_ss.str());
+    }
+}
 }  // namespace azino
