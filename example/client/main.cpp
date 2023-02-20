@@ -16,6 +16,7 @@ int main(int argc, char* argv[]) {
         while (true) {
             std::string action;
             std::string key, right_key, value;
+            std::vector<std::string> keys;
             std::vector<std::string> values;
             std::cin >> action;
             if (action == "begin") {
@@ -62,10 +63,10 @@ int main(int argc, char* argv[]) {
             } else if (action == "scan") {
                 std::cin >> key;
                 std::cin >> right_key;
-                auto sts = tx.Scan(key, right_key, values);
+                auto sts = tx.Scan(key, right_key, keys, values);
                 std::cout << sts.ToString() << std::endl;
-                for (auto& v : values) {
-                    std::cout << v << std::endl;
+                for (size_t i = 0; i < keys.size(); i++) {
+                    std::cout << keys[i] << " " << values[i] << std::endl;
                 }
             } else {
                 std::getline(std::cin, action);

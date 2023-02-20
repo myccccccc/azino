@@ -96,9 +96,10 @@ message MVCCScanRequest {
 };
 
 message MVCCScanResponse {
-  repeated string value = 1;
-  optional StorageStatus status = 2;
-  repeated uint64 ts = 3;
+  repeated string key = 1;
+  repeated string value = 2;
+  optional StorageStatus status = 3;
+  repeated uint64 ts = 4;
 };
 
 service StorageService {

@@ -112,13 +112,16 @@ void StorageServiceImpl::MVCCScan(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    std::vector<std::string> key;
     std::vector<std::string> value;
     std::vector<TimeStamp> ts;
-    StorageStatus ss = _storage->MVCCScan(
-        request->left_key(), request->right_key(), request->ts(), value, ts);
+    StorageStatus ss =
+        _storage->MVCCScan(request->left_key(), request->right_key(),
+                           request->ts(), key, value, ts);
     StorageStatus* ssts = new StorageStatus(ss);
     response->set_allocated_status(ssts);
     for (size_t i = 0; i < value.size(); i++) {
+        response->add_key(key[i]);
         response->add_value(value[i]);
         response->add_ts(ts[i]);
     }

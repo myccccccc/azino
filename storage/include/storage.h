@@ -166,6 +166,7 @@ class Storage {
 
     virtual StorageStatus MVCCScan(const std::string& left_key,
                                    const std::string& right_key, TimeStamp ts,
+                                   std::vector<std::string>& key,
                                    std::vector<std::string>& value,
                                    std::vector<TimeStamp>& seeked_ts) {
         StorageStatus ss;
@@ -195,6 +196,7 @@ class Storage {
                         continue;
                     }
                     if (!isDeleted) {
+                        key.push_back(next_key);
                         value.push_back(found_value);
                         seeked_ts.push_back(found_internal_key.TS());
                     }
@@ -220,8 +222,10 @@ class Storage {
     ok_out:
         if (!value.empty()) {
             ss.set_error_code(StorageStatus_Code_Ok);
+            ss.clear_error_message();
         } else {
             ss.set_error_code(StorageStatus_Code_NotFound);
+            ss.clear_error_message();
         }
 
     out:

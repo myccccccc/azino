@@ -105,6 +105,7 @@ TEST_F(DBImplTest, mvcc) {
 
     std::vector<std::string> res;
     std::vector<azino::TimeStamp> ress;
+    std::vector<std::string> resss;
     ASSERT_TRUE(storage->MVCCPut("scan1", 1, "1").error_code() ==
                 azino::storage::StorageStatus_Code_Ok);
     ASSERT_TRUE(storage->MVCCPut("scan1", 2, "2").error_code() ==
@@ -113,10 +114,28 @@ TEST_F(DBImplTest, mvcc) {
                 azino::storage::StorageStatus_Code_Ok);
     ASSERT_TRUE(storage->MVCCPut("scan2", 2, "2").error_code() ==
                 azino::storage::StorageStatus_Code_Ok);
-    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok,
-              storage->MVCCScan("scan1", "scan3", 2, res, ress).error_code());
+    ASSERT_EQ(
+        azino::storage::StorageStatus_Code_Ok,
+        storage->MVCCScan("scan1", "scan3", 2, resss, res, ress).error_code());
     ASSERT_EQ(2, res.size());
     ASSERT_EQ("2", res[0]);
+    ASSERT_EQ("2", res[1]);
+}
+
+TEST_F(DBImplTest, mvccscan) {
+    std::vector<std::string> res;
+    std::vector<azino::TimeStamp> ress;
+    std::vector<std::string> resss;
+    ASSERT_TRUE(storage->MVCCPut("a", 2, "1").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_TRUE(storage->MVCCPut("b", 2, "2").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_TRUE(storage->MVCCPut("c", 2, "3").error_code() ==
+                azino::storage::StorageStatus_Code_Ok);
+    ASSERT_EQ(azino::storage::StorageStatus_Code_Ok,
+              storage->MVCCScan("a", "d", 3, resss, res, ress).error_code());
+    ASSERT_EQ(3, res.size());
+    ASSERT_EQ("1", res[0]);
     ASSERT_EQ("2", res[1]);
 }
 

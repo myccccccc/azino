@@ -469,7 +469,8 @@ ChannelPtr& Transaction::Route(const std::string& key) {
 }
 
 Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
-                         std::vector<UserValue> values) {
+                         std::vector<UserValue>& keys,
+                         std::vector<UserValue>& values) {
     std::stringstream ss;
     BEGIN_CHECK(scan)
 
@@ -495,6 +496,7 @@ Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
             ss << " Find in Storage LeftKey: " << left_key
                << " RightKey: " << right_key;
             for (int i = 0; i < storage_resp.value_size(); i++) {
+                keys.push_back(storage_resp.key(i));
                 values.push_back(storage_resp.value(i));
             }
             return Status::Ok(storage_ss.str());

@@ -48,7 +48,7 @@ class Transaction {
     Status Delete(const WriteOptions& options, const UserKey& key);
     // include left_key, not include right_key
     Status Scan(const UserKey& left_key, const UserKey& right_key,
-                std::vector<UserValue> values);
+                std::vector<UserValue>& keys, std::vector<UserValue>& values);
 
    private:
     Status Write(const WriteOptions& options, const UserKey& key,
