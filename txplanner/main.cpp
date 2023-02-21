@@ -12,6 +12,7 @@ namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
 
+#include "planner.h"
 #include "service.h"
 #include "txidtable.h"
 
@@ -34,6 +35,7 @@ int main(int argc, char* argv[]) {
                               azino::PartitionConfig(FLAGS_txindex_addrs)));
     azino::txplanner::PartitionManager pm(
         azino::Partition(pcm, FLAGS_storage_addr));
+    azino::txplanner::CCPlanner planner(&pm);
 
     azino::txplanner::TxServiceImpl tx_service_impl(&tt, &pm);
     if (server.AddService(&tx_service_impl, brpc::SERVER_DOESNT_OWN_SERVICE) !=
@@ -42,7 +44,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    azino::txplanner::RegionServiceImpl region_service_impl(&tt);
+    azino::txplanner::RegionServiceImpl region_service_impl(&tt, &planner);
     if (server.AddService(&region_service_impl,
                           brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         LOG(FATAL) << "Fail to add region_service_impl";

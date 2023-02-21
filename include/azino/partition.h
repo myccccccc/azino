@@ -41,6 +41,9 @@ class Partition {
     inline const PartitionConfigMap& GetPartitionConfigMap() const {
         return partition_configmap;
     }
+    inline void SetPartitionConfigMap(const PartitionConfigMap& pcm) {
+        partition_configmap = pcm;
+    }
     inline const Storage GetStorage() const { return storage; }
 
     PartitionPB ToPB() const {

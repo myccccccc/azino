@@ -7,7 +7,8 @@
 namespace azino {
 namespace txplanner {
 
-RegionServiceImpl::RegionServiceImpl(TxIDTable* tt) : _tt(tt) {}
+RegionServiceImpl::RegionServiceImpl(TxIDTable* tt, CCPlanner* plr)
+    : _tt(tt), _plr(plr) {}
 
 RegionServiceImpl::~RegionServiceImpl() {}
 
