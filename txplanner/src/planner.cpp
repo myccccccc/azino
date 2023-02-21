@@ -14,10 +14,10 @@ CCPlanner::CCPlanner(PartitionManager *pm)
 
 CCPlanner::~CCPlanner() {
     if (bthread::execution_queue_stop(_queue) != 0) {
-        LOG(ERROR) << "fail to stop execution queue in Dependence";
+        LOG(ERROR) << "fail to stop execution queue in CCPlanner";
     }
     if (bthread::execution_queue_join(_queue) != 0) {
-        LOG(ERROR) << "fail to join execution queue in Dependence";
+        LOG(ERROR) << "fail to join execution queue in CCPlanner";
     }
 }
 
