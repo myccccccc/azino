@@ -37,14 +37,39 @@ int CCPlanner::execute(
     for (; iter; ++iter) {
         auto &range = iter->first;
         auto &rm = iter->second;
-        p->plan(range, rm);
-        p->_pm->UpdatePartitionConfigMap(p->_m);
+        RangeSet rs;
+        PartitionConfigMap pcm;
+        p->plan(range, rm, rs, pcm);
+        p->_pm->UpdatePartitionConfigMap(rs, pcm);
     }
 
     return 0;
 }
 
-void CCPlanner::plan(const Range &range, const RegionMetric &metric) { return; }
+void CCPlanner::plan(const Range &range, const RegionMetric &metric,
+                     RangeSet &to_del_ranges,
+                     PartitionConfigMap &to_add_ranges) {
+    // TODO: split or merge
+    auto iter = _m.find(range);
+    if (iter == _m.end()) {
+        LOG(ERROR) << "CCPlanner fail to find metric range:"
+                   << range.Describe();
+        return;
+    }
+    auto new_config = iter->second;
+    _m.erase(iter);
+    to_del_ranges.insert(range);
+
+    auto &pk = new_config.MutablePessimismKey();
+    pk.clear();
+    for (int i = 0; i < metric.pessimism_key_size(); i++) {
+        pk.insert(metric.pessimism_key(i));
+    }
+    _m.insert(std::make_pair(range, new_config));
+    to_add_ranges.insert(std::make_pair(range, new_config));
+
+    return;
+}
 
 }  // namespace txplanner
 }  // namespace azino

@@ -20,7 +20,8 @@ class CCPlanner {
         void* args,
         bthread::TaskIterator<std::pair<Range, RegionMetric>>& iter);
 
-    void plan(const Range& range, const RegionMetric& metric);
+    void plan(const Range& range, const RegionMetric& metric,
+              RangeSet& to_del_ranges, PartitionConfigMap& to_add_ranges);
 
     PartitionManager* _pm;
     PartitionConfigMap _m;

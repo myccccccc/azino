@@ -16,10 +16,12 @@ class PartitionManager {
    public:
     PartitionManager(azino::Partition initial_partition);
     azino::Partition GetPartition();
-    void UpdatePartitionConfigMap(const PartitionConfigMap& pcm);
+    void UpdatePartitionConfigMap(const RangeSet& to_del_ranges,
+                                  const PartitionConfigMap& to_add_ranges);
 
    private:
-    void apply_partition_config_map(const PartitionConfigMap& pcm);
+    void apply_partition_config_map(const RangeSet& to_del_ranges,
+                                    const PartitionConfigMap& to_add_ranges);
 
     bthread::Mutex m;
     azino::Partition partition;

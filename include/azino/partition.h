@@ -17,6 +17,7 @@ class PartitionConfig {
     const std::unordered_set<std::string>& GetPessimismKey() const {
         return pk;
     }
+    std::unordered_set<std::string>& MutablePessimismKey() { return pk; }
 
     PartitionConfigPB ToPB() const {
         PartitionConfigPB pb;
@@ -50,8 +51,8 @@ class Partition {
     inline const PartitionConfigMap& GetPartitionConfigMap() const {
         return partition_configmap;
     }
-    inline void SetPartitionConfigMap(const PartitionConfigMap& pcm) {
-        partition_configmap = pcm;
+    inline PartitionConfigMap& MutablePartitionConfigMap() {
+        return partition_configmap;
     }
     inline const std::string GetStorage() const { return storage; }
 

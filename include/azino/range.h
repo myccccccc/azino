@@ -15,7 +15,7 @@ class Range {
     inline bool Contains(const Range& rg) const {
         bool left_contain = false;
         bool right_contain = false;
-        if (left == "" || cmp(left, rg.left) ||
+        if (left == "" || (rg.left != "" && cmp(left, rg.left)) ||
             (left == rg.left && left_include >= rg.left_include)) {
             left_contain = true;
         }
@@ -58,8 +58,9 @@ class Range {
 
 class RangeComparator {
    public:
+    // return true when range lhs is completely before rhs
     inline bool operator()(const Range& lhs, const Range& rhs) {
-        if (lhs.right == "") {
+        if (lhs.right == "" || rhs.left == "") {
             return false;
         }
         if (cmp(lhs.right, rhs.left)) {
@@ -74,5 +75,7 @@ class RangeComparator {
    private:
     BitWiseComparator cmp;
 };
+
+typedef std::set<Range, RangeComparator> RangeSet;
 }  // namespace azino
 #endif  // AZINO_INCLUDE_RANGE_H
