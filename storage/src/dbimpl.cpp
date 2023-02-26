@@ -54,7 +54,6 @@ class LevelDBImpl : public Storage {
                               const std::string &value) override {
         CHECK_DB_PTR
         leveldb::WriteOptions opts;
-        opts.sync = true;
         leveldb::Status leveldbstatus;
         leveldbstatus = _leveldbptr->Put(opts, key, value);
         return LevelDBStatus(leveldbstatus);
@@ -63,7 +62,6 @@ class LevelDBImpl : public Storage {
     virtual StorageStatus BatchStore(const std::vector<Data> &datas) override {
         CHECK_DB_PTR
         leveldb::WriteOptions opts;
-        opts.sync = true;
         leveldb::Status leveldbstatus;
         leveldb::WriteBatch batch;
 
