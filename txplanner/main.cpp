@@ -2,8 +2,6 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
-#include <toml/toml.hpp>
-
 DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",

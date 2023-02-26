@@ -2,8 +2,6 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
-#include <toml/toml.hpp>
-
 DEFINE_string(server, "0.0.0.0:8000", "Address of server");
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
