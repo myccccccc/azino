@@ -38,19 +38,18 @@
 
 DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
 
+static brpc::ChannelOptions channel_options;
+
 namespace azino {
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
-    : _options(options),
-      _channel_options(new brpc::ChannelOptions),
-      _txid(nullptr),
-      _txwritebuffer(new TxWriteBuffer) {
-    _channel_options->timeout_ms = FLAGS_timeout_ms;
+    : _options(options), _txid(nullptr), _txwritebuffer(nullptr) {
+    channel_options.timeout_ms = FLAGS_timeout_ms;
 
     std::stringstream ss;
     auto* channel = new brpc::Channel();
     int err;
-    err = channel->Init(txplanner_addr.c_str(), _channel_options.get());
+    err = channel->Init(txplanner_addr.c_str(), &channel_options);
     if (err) {
         LOG_CHANNEL_ERROR(txplanner_addr, err, ss)
         return;
@@ -85,13 +84,14 @@ Status Transaction::Begin() {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::TxPlannerErr(ss.str());
     }
+    _txwritebuffer.reset(new TxWriteBuffer);
     auto partition = Partition::FromPB(resp.partition());
 
     // init storage channel
     auto storage_addr = partition.GetStorage();
     if (_channel_table.find(storage_addr) == _channel_table.end()) {
         ChannelPtr channel(new brpc::Channel());
-        err = channel->Init(storage_addr.c_str(), _channel_options.get());
+        err = channel->Init(storage_addr.c_str(), &channel_options);
         if (err) {
             LOG_CHANNEL_ERROR(storage_addr.c_str(), err, ss)
             return Status::NetworkErr(ss.str());
@@ -108,7 +108,7 @@ Status Transaction::Begin() {
         auto txindex_addr = partition_config.GetTxIndex();
         if (_channel_table.find(txindex_addr) == _channel_table.end()) {
             ChannelPtr channel(new brpc::Channel());
-            err = channel->Init(txindex_addr.c_str(), _channel_options.get());
+            err = channel->Init(txindex_addr.c_str(), &channel_options);
             if (err) {
                 LOG_CHANNEL_ERROR(txindex_addr, err, ss)
                 return Status::NetworkErr(ss.str());
@@ -116,7 +116,7 @@ Status Transaction::Begin() {
             _channel_table.insert(std::make_pair(txindex_addr, channel));
         }
         auto channel = _channel_table.find(txindex_addr)->second;
-        _txindexs.insert(std::make_pair(
+        _route_table.insert(std::make_pair(
             range, Region{channel, partition_config.GetPessimismKey()}));
     }
 
@@ -467,8 +467,8 @@ readStorage:
 
 Region& Transaction::Route(const std::string& key) {
     auto key_range = azino::Range(key, key, 1, 1);
-    auto iter = _txindexs.lower_bound(key_range);
-    if (iter == _txindexs.end() || !iter->first.Contains(key_range)) {
+    auto iter = _route_table.lower_bound(key_range);
+    if (iter == _route_table.end() || !iter->first.Contains(key_range)) {
         LOG(FATAL) << "Fail to route key:" << key;
     }
     return iter->second;
@@ -517,5 +517,11 @@ Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
                << " error message: " << storage_resp.status().error_message();
             return Status::StorageErr(storage_ss.str());
     }
+}
+
+void Transaction::Reset() {
+    _txid.reset();
+    _txwritebuffer.reset();
+    _route_table.clear();
 }
 }  // namespace azino

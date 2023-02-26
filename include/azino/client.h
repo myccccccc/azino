@@ -34,6 +34,8 @@ typedef struct Region {
     std::unordered_set<std::string> pk;
 } Region;
 
+typedef std::map<Range, Region, RangeComparator> PartitionRouteTable;
+
 // not thread safe
 class Transaction {
    public:
@@ -55,6 +57,8 @@ class Transaction {
     Status Scan(const UserKey& left_key, const UserKey& right_key,
                 std::vector<UserValue>& keys, std::vector<UserValue>& values);
 
+    void Reset();
+
    private:
     Status Write(WriteOptions options, const UserKey& key, bool is_delete,
                  const UserValue& value = "");
@@ -63,11 +67,10 @@ class Transaction {
     Status AbortAll();
     Region& Route(const std::string& key);
     Options _options;
-    ChannelOptionsPtr _channel_options;
     ChannelPtr _txplanner;
     ChannelPtr _storage;
     ChannelTable _channel_table;
-    std::map<Range, Region, RangeComparator> _txindexs;
+    PartitionRouteTable _route_table;
     TxIdentifierPtr _txid;
     TxWriteBufferPtr _txwritebuffer;
 };
