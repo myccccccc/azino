@@ -70,7 +70,9 @@ message GetMinATSResponse {
 }
 
 message RegionMetric {
-
+  optional int64 read_qps = 1;
+  optional int64 write_qps = 2;
+  repeated string pessimism_key = 3;
 }
 
 message RegionMetricRequest {

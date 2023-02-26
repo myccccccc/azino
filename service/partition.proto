@@ -10,6 +10,7 @@ message RangePB {
 
 message PartitionConfigPB {
   optional string txindex = 1;
+  repeated string pessimism_key =2;
 }
 
 message PartitionConfigMapPB {

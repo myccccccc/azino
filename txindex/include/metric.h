@@ -8,6 +8,7 @@
 #include <gflags/gflags.h>
 
 #include <memory>
+#include <unordered_set>
 
 #include "azino/background_task.h"
 #include "bthread/bthread.h"
@@ -29,6 +30,7 @@ class RegionMetric : public azino::BackgroundTask {
 
     void RecordRead(const TxOpStatus& read_status, int64_t start_time);
     void RecordWrite(const TxOpStatus& write_status, int64_t start_time);
+    void RecordPessimismKey(const std::string& key);
 
    private:
     void report_metric();
@@ -45,6 +47,9 @@ class RegionMetric : public azino::BackgroundTask {
     bvar::LatencyRecorder
         read_error;  // read error(not exist, block) latency(us)
     bvar::LatencyRecorder read_success;  // read success latency(us)
+
+    bthread::Mutex m;
+    std::unordered_set<std::string> pk;  // pessimism key
 
     KVRegion* _region;
     txplanner::RegionService_Stub _txplanner_stub;

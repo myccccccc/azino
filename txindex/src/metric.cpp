@@ -5,7 +5,7 @@
 
 #include "index.h"
 
-DEFINE_int32(region_metric_period_s, 5, "region metric period time");
+DEFINE_int32(region_metric_period_s, 3, "region metric period time");
 static bvar::GFlag gflag_region_metric_period_s("region_metric_period_s");
 DEFINE_bool(enable_region_metric_report, true,
             "enable region metric report to txplanner");
@@ -62,6 +62,20 @@ void RegionMetric::report_metric() {
     brpc::Controller cntl;
     azino::txplanner::RegionMetricRequest req;
     azino::txplanner::RegionMetricResponse resp;
+    {
+        auto range = req.mutable_range();
+        *range = _region->GetRange().ToPB();
+        auto metric = req.mutable_metric();
+        metric->set_read_qps(read.qps());
+        metric->set_write_qps(write.qps());
+        {
+            std::lock_guard<bthread::Mutex> lck(m);
+            for (const auto &key : pk) {
+                metric->add_pessimism_key(key);
+            }
+            pk.clear();
+        }
+    }
 
     _txplanner_stub.RegionMetric(&cntl, &req, &resp, NULL);
 
@@ -84,6 +98,11 @@ void *RegionMetric::execute(void *args) {
         p->report_metric();
     }
     return nullptr;
+}
+
+void RegionMetric::RecordPessimismKey(const std::string &key) {
+    std::lock_guard<bthread::Mutex> lck(m);
+    pk.insert(key);
 }
 
 }  // namespace txindex

@@ -178,6 +178,8 @@ class KVRegion {
 
     inline std::string Describe() { return _range.Describe(); }
 
+    inline const Range& GetRange() { return _range; }
+
    private:
     Range _range;
     std::vector<KVBucket> _kvbs;
