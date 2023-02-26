@@ -8,6 +8,8 @@
 #include "depedence.h"
 #include "index.h"
 
+DECLARE_bool(enable_dep_reporter);
+
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \
         auto iter = mv.LargestTSValue();                                 \
@@ -137,25 +139,27 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
         return sts;
     }
 
-    // uncommitted RW dep
-    if (mv.LockType() != MVCCLock::None) {
-        deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
-                                    mv.LockHolder()});
+    if (FLAGS_enable_dep_reporter) {
+        // uncommitted RW dep
+        if (mv.LockType() != MVCCLock::None) {
+            deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
+                                        mv.LockHolder()});
+        }
+
+        // committed RW dep
+        auto iter = mv.LargestTSValue();
+        while (iter != mv.MVV().end() &&
+               iter->first.commit_ts() > txid.start_ts()) {
+            deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
+                                        iter->first});
+            iter++;
+        }
+
+        // add reader
+        mv.AddReader(txid);
     }
 
-    // committed RW dep
-    auto iter = mv.LargestTSValue();
-    while (iter != mv.MVV().end() &&
-           iter->first.commit_ts() > txid.start_ts()) {
-        deps.push_back(
-            txindex::Dep{key, txindex::DepType::READWRITE, txid, iter->first});
-        iter++;
-    }
-
-    // add reader
-    mv.AddReader(txid);
-
-    iter = mv.Seek(txid.start_ts());
+    auto iter = mv.Seek(txid.start_ts());
     if (iter != mv.MVV().end()) {
         sts.set_error_code(TxOpStatus_Code_Ok);
         v.CopyFrom(*(iter->second));
@@ -246,7 +250,9 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
         // go down
     }
 
-    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
+    if (FLAGS_enable_dep_reporter) {
+        CHECK_READ_WRITE_DEP(key, mv, txid, deps)
+    }
 
     switch (lock_type) {
         case MVCCLock::WriteIntent:
