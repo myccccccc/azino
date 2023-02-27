@@ -7,8 +7,7 @@ DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",
               "Addresses of txindexes, split by space");
-DEFINE_int32(partition_num_per_txindex, 3,
-             "partitions number in one txindex");
+DEFINE_int32(partition_num_per_txindex, 3, "partitions number in one txindex");
 DEFINE_int32(kv_len, 16, "key value length in partition endpoint");
 DEFINE_string(log_file, "log_txplanner", "log file name for txplanner");
 
