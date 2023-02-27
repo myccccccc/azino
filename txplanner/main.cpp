@@ -10,6 +10,8 @@ DEFINE_string(txindex_addrs, "0.0.0.0:8002",
 DEFINE_int32(partition_num_per_txindex, 256,
              "partitions number in one txindex");
 DEFINE_int32(kv_len, 16, "key value length in partition endpoint");
+DEFINE_string(log_file, "log_txplanner", "log file name for txplanner");
+
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
@@ -19,8 +21,15 @@ DECLARE_bool(crash_on_fatal_log);
 #include "txidtable.h"
 
 int main(int argc, char* argv[]) {
-    logging::FLAGS_crash_on_fatal_log = true;
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+
+    logging::FLAGS_crash_on_fatal_log = true;
+    logging::LoggingSettings log_settings;
+    log_settings.logging_dest = logging::LoggingDestination::LOG_TO_FILE;
+    log_settings.log_file = FLAGS_log_file.c_str();
+    log_settings.delete_old =
+        logging::OldFileDeletionState::DELETE_OLD_LOG_FILE;
+    logging::InitLogging(log_settings);
 
     brpc::Server server;
     azino::txplanner::TxIDTable tt;

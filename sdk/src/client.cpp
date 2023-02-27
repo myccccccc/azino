@@ -77,7 +77,7 @@ Status Transaction::Begin() {
         return Status::NetworkErr(ss.str());
     }
 
-    LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
+    //    LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
     if (_txid->status().status_code() != TxStatus_Code_Start) {

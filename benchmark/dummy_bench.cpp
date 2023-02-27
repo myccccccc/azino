@@ -1,4 +1,5 @@
 #include <butil/fast_rand.h>
+#include <butil/logging.h>
 #include <gflags/gflags.h>
 
 #include <iostream>
@@ -9,10 +10,21 @@ DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_int32(round_num, 1000, "execution round number");
 DEFINE_int32(op_num, 5, "operation number per round");
 DEFINE_int32(kv_len, 16, "key value length in every operation");
+DEFINE_string(log_file, "log_dummy_bench", "log file name for dummy_bench");
+namespace logging {
+DECLARE_bool(crash_on_fatal_log);
+}
 
 int main(int argc, char* argv[]) {
-    // Parse gflags. We recommend you to use gflags as well.
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+
+    logging::FLAGS_crash_on_fatal_log = true;
+    logging::LoggingSettings log_settings;
+    log_settings.logging_dest = logging::LoggingDestination::LOG_TO_FILE;
+    log_settings.log_file = FLAGS_log_file.c_str();
+    log_settings.delete_old =
+        logging::OldFileDeletionState::DELETE_OLD_LOG_FILE;
+    logging::InitLogging(log_settings);
 
     azino::Options options;
     azino::Transaction tx(options, FLAGS_txplanner_addr);
