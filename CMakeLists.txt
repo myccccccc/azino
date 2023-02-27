@@ -120,3 +120,4 @@ add_subdirectory(example/client)
 
 # build benchmark
 add_subdirectory(benchmark)
+add_subdirectory(benchmark/YCSB-cpp)
