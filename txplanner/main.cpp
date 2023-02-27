@@ -1,4 +1,5 @@
 #include <brpc/server.h>
+#include <butil/fast_rand.h>
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
@@ -6,6 +7,9 @@ DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",
               "Addresses of txindexes, split by space");
+DEFINE_int32(partition_num_per_txindex, 256,
+             "partitions number in one txindex");
+DEFINE_int32(kv_len, 16, "key value length in partition endpoint");
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
@@ -20,17 +24,39 @@ int main(int argc, char* argv[]) {
 
     brpc::Server server;
     azino::txplanner::TxIDTable tt;
+
+    std::string txindex_addr;
+    std::vector<std::string> txindex_addrs;
+    std::stringstream ss(FLAGS_txindex_addrs);
+    while (ss >> txindex_addr) {
+        txindex_addrs.push_back(txindex_addr);
+        txindex_addr.clear();
+    }
+
+    std::unordered_set<std::string> partition_endpoint_set;
+    while (partition_endpoint_set.size() <
+           txindex_addr.size() * FLAGS_partition_num_per_txindex - 2) {
+        partition_endpoint_set.insert(butil::fast_rand_printable(FLAGS_kv_len));
+    }
+    std::deque<std::string> partition_endpoint(partition_endpoint_set.begin(),
+                                               partition_endpoint_set.end());
+    std::sort(partition_endpoint.begin(), partition_endpoint.end());
+    partition_endpoint.emplace_front("");
+    partition_endpoint.emplace_back("");
+
     azino::PartitionConfigMap pcm;
-    pcm.insert(std::make_pair(azino::Range("", "b", 0, 0),
-                              azino::PartitionConfig(FLAGS_txindex_addrs)));
-    pcm.insert(std::make_pair(azino::Range("b", "c", 1, 0),
-                              azino::PartitionConfig(FLAGS_txindex_addrs)));
-    pcm.insert(std::make_pair(azino::Range("c", "c", 1, 1),
-                              azino::PartitionConfig(FLAGS_txindex_addrs)));
-    pcm.insert(std::make_pair(azino::Range("c", "d", 0, 1),
-                              azino::PartitionConfig(FLAGS_txindex_addrs)));
-    pcm.insert(std::make_pair(azino::Range("d", "", 0, 0),
-                              azino::PartitionConfig(FLAGS_txindex_addrs)));
+    size_t index = 0;
+    for (auto& txindex_addr : txindex_addrs) {
+        for (auto i = 0; i < FLAGS_partition_num_per_txindex; i++) {
+            auto range = azino::Range(partition_endpoint[index],
+                                      partition_endpoint[index + 1], 1, 0);
+            pcm.insert(
+                std::make_pair(range, azino::PartitionConfig(txindex_addr)));
+            LOG(INFO) << "Txindex:" << txindex_addr
+                      << " Range:" << range.Describe();
+        }
+    }
+
     azino::txplanner::PartitionManager pm(
         azino::Partition(pcm, FLAGS_storage_addr));
     azino::txplanner::CCPlanner planner(&pm);
