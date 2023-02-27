@@ -1,6 +1,6 @@
 #include "index.h"
 
-DEFINE_bool(enable_dep_reporter, true, "enable dependency reporter");
+DEFINE_bool(enable_dep_reporter, false, "enable dependency reporter");
 static bvar::GFlag gflag_enable_dep_reporter("enable_dep_reporter");
 
 namespace azino {

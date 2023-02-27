@@ -53,6 +53,7 @@ class TxIndexImplTest : public testing::Test {
         t2.set_start_ts(2);
         v1.set_content("tx1value");
         v2.set_content("tx2value");
+        FLAGS_enable_dep_reporter = true;
     }
     void TearDown() { delete ti; }
 
