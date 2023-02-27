@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     std::unordered_set<std::string> partition_endpoint_set;
     while (partition_endpoint_set.size() <
-           txindex_addr.size() * FLAGS_partition_num_per_txindex - 2) {
+           txindex_addrs.size() * FLAGS_partition_num_per_txindex - 2) {
         partition_endpoint_set.insert(butil::fast_rand_printable(FLAGS_kv_len));
     }
     std::deque<std::string> partition_endpoint(partition_endpoint_set.begin(),
@@ -54,6 +54,7 @@ int main(int argc, char* argv[]) {
                 std::make_pair(range, azino::PartitionConfig(txindex_addr)));
             LOG(INFO) << "Txindex:" << txindex_addr
                       << " Range:" << range.Describe();
+            index++;
         }
     }
 
