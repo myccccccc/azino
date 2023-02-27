@@ -23,7 +23,7 @@ fi
 rc=0
 cd "${CURRENTDIR}" || exit
 rm -rf output && mkdir -p output/test && \
-find build | grep -E '(txindex_server|txplanner_server|storage_server|azino_client)$' | xargs -i cp -v {} output && \
+find build | grep -E '(txindex_server|txplanner_server|storage_server|azino_client|dummy_benchmark)$' | xargs -i cp -v {} output && \
 find build | grep -E '(test_[^\.]+)$' | xargs -i cp -v {} output/test && \
 cp -v run_all_tests.sh output/test
 
