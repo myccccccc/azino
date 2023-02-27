@@ -7,7 +7,7 @@ DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",
               "Addresses of txindexes, split by space");
-DEFINE_int32(partition_num_per_txindex, 256,
+DEFINE_int32(partition_num_per_txindex, 3,
              "partitions number in one txindex");
 DEFINE_int32(kv_len, 16, "key value length in partition endpoint");
 DEFINE_string(log_file, "log_txplanner", "log file name for txplanner");
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 
     std::unordered_set<std::string> partition_endpoint_set;
     while (partition_endpoint_set.size() <
-           txindex_addrs.size() * FLAGS_partition_num_per_txindex - 2) {
+           txindex_addrs.size() * FLAGS_partition_num_per_txindex - 1) {
         partition_endpoint_set.insert(butil::fast_rand_printable(FLAGS_kv_len));
     }
     std::deque<std::string> partition_endpoint(partition_endpoint_set.begin(),
