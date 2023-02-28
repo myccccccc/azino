@@ -189,21 +189,31 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     int cnt = 0;
-    for (auto& it : datas) {
-        assert(!it.t2vs.empty());
+    for (const auto& it : datas) {
         if (_kvs.find(it.key) == _kvs.end()) {
             LOG(ERROR) << "UserKey: " << it.key
                        << " clear persist error due to no key in _kvs.";
+            goto out;
         }
-        auto n = _kvs[it.key].Truncate(it.t2vs.begin()->first);
-        cnt += n;
+
+        auto& mv = _kvs[it.key];
+        auto n = mv.Truncate(it.t2vs.begin()->first);
         if (it.t2vs.size() != n) {
             LOG(ERROR)
                 << "UserKey: " << it.key
                 << " clear persist error due to truncate number not match.";
+            goto out;
+        }
+
+        cnt += n;
+
+        if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
+            mv.Readers().empty()) {
+            _kvs.erase(it.key);
         }
     }
 
+out:
     return cnt;
 }
 

@@ -1,7 +1,7 @@
 import os
 import os.path
 
-format_dir = ["example", "include", "sdk", "service", "storage", "txindex", "txplanner", "benchmark"]
+format_dir = ["example", "include", "sdk", "service", "storage", "txindex", "txplanner", "benchmark/dummy_bench"]
 path = os.getcwd()
 
 for p in format_dir:
