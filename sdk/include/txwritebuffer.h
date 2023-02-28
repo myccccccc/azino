@@ -3,22 +3,26 @@
 
 #include <butil/macros.h>
 
-#include <unordered_map>
+#include <map>
 
+#include "azino/comparator.h"
 #include "azino/kv.h"
 #include "azino/options.h"
 #include "service/kv.pb.h"
 
 namespace azino {
 enum TxWriteStatus { NONE = 0, LOCKED = 1, PREPUTED = 2, COMMITTED = 3 };
+
+typedef struct TxWrite {
+    WriteOptions options;
+    Value value;
+    TxWriteStatus status = NONE;
+} TxWrite;
+
+typedef std::map<UserKey, TxWrite, BitWiseComparator> Buffer;
+
 class TxWriteBuffer {
    public:
-    typedef struct Write {
-        WriteOptions options;
-        Value value;
-        TxWriteStatus status = NONE;
-    } TxWrite;
-
     TxWriteBuffer() = default;
     DISALLOW_COPY_AND_ASSIGN(TxWriteBuffer);
     ~TxWriteBuffer() = default;
@@ -34,26 +38,14 @@ class TxWriteBuffer {
         _m[key].value.set_content(value);
     }
 
-    std::__detail::_Node_iterator<
-        std::pair<const std::basic_string<char>, TxWrite>, false, true>
-    begin() {
-        return _m.begin();
-    }
+    Buffer::iterator begin() { return _m.begin(); }
 
-    std::__detail::_Node_iterator<
-        std::pair<const std::basic_string<char>, TxWrite>, false, true>
-    end() {
-        return _m.end();
-    }
+    Buffer::iterator end() { return _m.end(); }
 
-    std::__detail::_Node_iterator<
-        std::pair<const std::basic_string<char>, TxWrite>, false, true>
-    find(const UserKey& key) {
-        return _m.find(key);
-    }
+    Buffer::iterator find(const UserKey& key) { return _m.find(key); }
 
    private:
-    std::unordered_map<UserKey, TxWrite> _m;
+    Buffer _m;
 };
 }  // namespace azino
 #endif  // AZINO_SDK_INCLUDE_TXWRITEBUFFER_H

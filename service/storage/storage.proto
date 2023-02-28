@@ -89,12 +89,23 @@ message BatchStoreResponse {
   optional StorageStatus status = 1;
 };
 
+message MVCCScanRequest {
+  optional string left_key = 1; // include
+  optional string right_key = 2; // not include
+  optional uint64 ts = 3;
+};
+
+message MVCCScanResponse {
+  repeated string key = 1;
+  repeated string value = 2;
+  optional StorageStatus status = 3;
+  repeated uint64 ts = 4;
+};
+
 service StorageService {
-  rpc Put(PutRequest) returns (PutResponse);
-  rpc Get(GetRequest) returns (GetResponse);
-  rpc Delete(DeleteRequest) returns (DeleteResponse);
   rpc MVCCPut(MVCCPutRequest) returns (MVCCPutResponse);
   rpc MVCCGet(MVCCGetRequest) returns (MVCCGetResponse);
   rpc MVCCDelete(MVCCDeleteRequest) returns (MVCCDeleteResponse);
+  rpc MVCCScan(MVCCScanRequest) returns (MVCCScanResponse);
   rpc BatchStore(BatchStoreRequest) returns (BatchStoreResponse);
 };

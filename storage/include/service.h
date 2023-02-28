@@ -13,21 +13,6 @@ class StorageServiceImpl : public StorageService {
 
     virtual ~StorageServiceImpl() = default;
 
-    virtual void Put(::google::protobuf::RpcController* controller,
-                     const ::azino::storage::PutRequest* request,
-                     ::azino::storage::PutResponse* response,
-                     ::google::protobuf::Closure* done) override;
-
-    virtual void Get(::google::protobuf::RpcController* controller,
-                     const ::azino::storage::GetRequest* request,
-                     ::azino::storage::GetResponse* response,
-                     ::google::protobuf::Closure* done) override;
-
-    virtual void Delete(::google::protobuf::RpcController* controller,
-                        const ::azino::storage::DeleteRequest* request,
-                        ::azino::storage::DeleteResponse* response,
-                        ::google::protobuf::Closure* done) override;
-
     virtual void MVCCPut(::google::protobuf::RpcController* controller,
                          const ::azino::storage::MVCCPutRequest* request,
                          ::azino::storage::MVCCPutResponse* response,
@@ -42,6 +27,11 @@ class StorageServiceImpl : public StorageService {
                             const ::azino::storage::MVCCDeleteRequest* request,
                             ::azino::storage::MVCCDeleteResponse* response,
                             ::google::protobuf::Closure* done) override;
+
+    virtual void MVCCScan(::google::protobuf::RpcController* controller,
+                          const ::azino::storage::MVCCScanRequest* request,
+                          ::azino::storage::MVCCScanResponse* response,
+                          ::google::protobuf::Closure* done) override;
 
     virtual void BatchStore(::google::protobuf::RpcController* controller,
                             const ::azino::storage::BatchStoreRequest* request,

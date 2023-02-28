@@ -2,8 +2,8 @@ project(azino_storage C CXX)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/leveldb/dbimpl.cpp
-                                   ${PROJECT_SOURCE_DIR}/service/storageserviceimpl.cpp
+add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCE_DIR}/src/dbimpl.cpp
+                                   ${PROJECT_SOURCE_DIR}/src/storageserviceimpl.cpp
                                    ${PROJECT_SOURCE_DIR}/src/utils.cpp)
 add_library(azino_storage::lib ALIAS ${PROJECT_NAME})
 

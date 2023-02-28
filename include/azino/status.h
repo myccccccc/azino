@@ -21,8 +21,8 @@ class Status {
     Status static TxIndexErr(const std::string& s = "") {
         return Status(kTxIndexErr, s);
     }
-    Status static NotSupportedErr(const std::string& s = "") {
-        return Status(kNotSupportedErr, s);
+    Status static TxPlannerErr(const std::string& s = "") {
+        return Status(kTxPlannerErr, s);
     }
     Status static StorageErr(const std::string& s = "") {
         return Status(kStorageErr, s);
@@ -32,7 +32,7 @@ class Status {
     bool IsNetWorkErr() { return _error_code == kNetworkErr; }
     bool IsIllegalTxOp() { return _error_code == kIllegalTxOp; }
     bool IsTxIndexErr() { return _error_code == kTxIndexErr; }
-    bool IsNotSupportedErr() { return _error_code == kNotSupportedErr; }
+    bool IsTxPlannerErr() { return _error_code == kTxPlannerErr; }
     bool IsStorageErr() { return _error_code == kStorageErr; }
     std::string ToString() {
         std::stringstream ss;
@@ -53,8 +53,8 @@ class Status {
             case kTxIndexErr:
                 code_message = "TxIndexErr. ";
                 break;
-            case kNotSupportedErr:
-                code_message = "NotSupportedError. ";
+            case kTxPlannerErr:
+                code_message = "TxPlannerError. ";
                 break;
             case kStorageErr:
                 code_message = "StorageError. ";
@@ -72,7 +72,7 @@ class Status {
         kIllegalTxOp = 3,
         kTxIndexErr = 4,
         kStorageErr = 5,
-        kNotSupportedErr = 6
+        kTxPlannerErr = 6
     };
     Status(Code c, const std::string& s) : _error_code(c), _error_message(s) {}
     Code _error_code;

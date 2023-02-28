@@ -1,0 +1,24 @@
+syntax="proto2";
+package azino;
+
+message RangePB {
+  optional string left = 1;
+  optional string right = 2;
+  optional int32 left_include = 3;
+  optional int32 right_include = 4;
+}
+
+message PartitionConfigPB {
+  optional string txindex = 1;
+  repeated string pessimism_key =2;
+}
+
+message PartitionConfigMapPB {
+  repeated RangePB ranges = 1;
+  repeated PartitionConfigPB partition_configs = 2;
+}
+
+message PartitionPB {
+  optional PartitionConfigMapPB pcm = 1;
+  optional string storage = 2;
+}
