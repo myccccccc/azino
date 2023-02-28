@@ -81,7 +81,8 @@ void RegionPersist::persist() {
                    << resp.status().error_code()
                    << " error msg: " << resp.status().error_message();
     } else {
-        _region->KVBuckets()[persist_bucket_num].ClearPersisted(datas);
+        _region->KVBuckets()[persist_bucket_num].ClearPersisted(
+            datas, &_region->_metric);
     }
 
 out:

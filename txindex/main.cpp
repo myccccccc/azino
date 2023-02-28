@@ -8,14 +8,23 @@
 
 DEFINE_string(txindex_addr, "0.0.0.0:8002", "Addresses of txindex");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
+DEFINE_string(log_file, "log_txindex", "log file name for txindex");
 
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
 
 int main(int argc, char* argv[]) {
-    logging::FLAGS_crash_on_fatal_log = true;
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+
+    logging::FLAGS_crash_on_fatal_log = true;
+    logging::LoggingSettings log_settings;
+    log_settings.logging_dest = logging::LoggingDestination::LOG_TO_FILE;
+    auto log_file = FLAGS_log_file + FLAGS_txindex_addr;
+    log_settings.log_file = log_file.c_str();
+    log_settings.delete_old =
+        logging::OldFileDeletionState::DELETE_OLD_LOG_FILE;
+    logging::InitLogging(log_settings);
 
     brpc::Server server;
     brpc::ServerOptions server_options;

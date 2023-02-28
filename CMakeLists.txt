@@ -117,3 +117,7 @@ add_subdirectory(sdk)
 # build examples
 add_subdirectory(example/echo_c++)
 add_subdirectory(example/client)
+
+# build benchmark
+add_subdirectory(benchmark/dummy_bench)
+add_subdirectory(benchmark/YCSB-cpp)

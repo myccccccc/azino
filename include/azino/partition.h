@@ -3,32 +3,42 @@
 
 #include <map>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 #include "azino/range.h"
 #include "service/partition.pb.h"
 
 namespace azino {
-typedef std::string TxIndex;  // txindex addresses in form of "0.0.0.0:8000"
-typedef std::string Storage;  // storage addresses in form of "0.0.0.0:8000"
-
 class PartitionConfig {
    public:
-    PartitionConfig(TxIndex t) : txindex(std::move(t)) {}
-    TxIndex GetTxIndex() const { return txindex; }
+    PartitionConfig(std::string t) : txindex(std::move(t)) {}
+    std::string GetTxIndex() const { return txindex; }
+    const std::unordered_set<std::string>& GetPessimismKey() const {
+        return pk;
+    }
+    std::unordered_set<std::string>& MutablePessimismKey() { return pk; }
 
     PartitionConfigPB ToPB() const {
         PartitionConfigPB pb;
         pb.set_txindex(txindex);
+        for (auto& key : pk) {
+            pb.add_pessimism_key(key);
+        }
         return pb;
     }
 
     static PartitionConfig FromPB(const PartitionConfigPB& pb) {
-        return PartitionConfig(pb.txindex());
+        auto res = PartitionConfig(pb.txindex());
+        for (int i = 0; i < pb.pessimism_key_size(); i++) {
+            res.pk.insert(pb.pessimism_key(i));
+        }
+        return res;
     }
 
    private:
-    TxIndex txindex;
+    std::string txindex;  // txindex addresses in form of "0.0.0.0:8000"
+    std::unordered_set<std::string> pk;
 };
 
 typedef std::map<Range, PartitionConfig, RangeComparator> PartitionConfigMap;
@@ -36,12 +46,15 @@ typedef std::map<Range, PartitionConfig, RangeComparator> PartitionConfigMap;
 class Partition {
    public:
     Partition() = default;
-    Partition(PartitionConfigMap pcm, Storage s)
+    Partition(PartitionConfigMap pcm, std::string s)
         : partition_configmap(std::move(pcm)), storage(std::move(s)) {}
     inline const PartitionConfigMap& GetPartitionConfigMap() const {
         return partition_configmap;
     }
-    inline const Storage GetStorage() const { return storage; }
+    inline PartitionConfigMap& MutablePartitionConfigMap() {
+        return partition_configmap;
+    }
+    inline const std::string GetStorage() const { return storage; }
 
     PartitionPB ToPB() const {
         PartitionPB pb;
@@ -70,7 +83,7 @@ class Partition {
 
    private:
     PartitionConfigMap partition_configmap;
-    Storage storage;
+    std::string storage;  // storage addresses in form of "0.0.0.0:8000"
 };
 }  // namespace azino
 

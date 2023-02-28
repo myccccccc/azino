@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "partition_manager.h"
+#include "planner.h"
 #include "service/tx.pb.h"
 #include "service/txplanner/txplanner.pb.h"
 #include "txidtable.h"
@@ -46,7 +47,7 @@ class TxServiceImpl : public TxService {
 
 class RegionServiceImpl : public RegionService {
    public:
-    RegionServiceImpl(TxIDTable* tt);
+    RegionServiceImpl(TxIDTable* tt, CCPlanner* plr);
     ~RegionServiceImpl();
 
     virtual void RWDep(::google::protobuf::RpcController* controller,
@@ -67,6 +68,7 @@ class RegionServiceImpl : public RegionService {
 
    private:
     TxIDTable* _tt;
+    CCPlanner* _plr;
 };
 
 class PartitionServiceImpl : public PartitionService {

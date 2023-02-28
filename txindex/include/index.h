@@ -145,7 +145,8 @@ class KVBucket {
                     std::function<void()> callback, Deps& deps);
     int GetPersisting(std::vector<txindex::DataToPersist>& datas,
                       uint64_t min_ats);
-    int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
+    int ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
+                       RegionMetric* regionMetric = nullptr);
 
    private:
     TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,
@@ -178,11 +179,15 @@ class KVRegion {
 
     inline std::string Describe() { return _range.Describe(); }
 
+    inline const Range& GetRange() { return _range; }
+
    private:
     Range _range;
     std::vector<KVBucket> _kvbs;
     RegionPersist _persistor;
     Dependence _deprpt;
+
+   public:
     RegionMetric _metric;
 };
 

@@ -8,6 +8,8 @@
 #include "depedence.h"
 #include "index.h"
 
+DECLARE_bool(enable_dep_reporter);
+
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \
         auto iter = mv.LargestTSValue();                                 \
@@ -136,25 +138,27 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
         return sts;
     }
 
-    // uncommitted RW dep
-    if (mv.LockType() != MVCCLock::None) {
-        deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
-                                    mv.LockHolder()});
+    if (FLAGS_enable_dep_reporter) {
+        // uncommitted RW dep
+        if (mv.LockType() != MVCCLock::None) {
+            deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
+                                        mv.LockHolder()});
+        }
+
+        // committed RW dep
+        auto iter = mv.LargestTSValue();
+        while (iter != mv.MVV().end() &&
+               iter->first.commit_ts() > txid.start_ts()) {
+            deps.push_back(txindex::Dep{key, txindex::DepType::READWRITE, txid,
+                                        iter->first});
+            iter++;
+        }
+
+        // add reader
+        mv.AddReader(txid);
     }
 
-    // committed RW dep
-    auto iter = mv.LargestTSValue();
-    while (iter != mv.MVV().end() &&
-           iter->first.commit_ts() > txid.start_ts()) {
-        deps.push_back(
-            txindex::Dep{key, txindex::DepType::READWRITE, txid, iter->first});
-        iter++;
-    }
-
-    // add reader
-    mv.AddReader(txid);
-
-    iter = mv.Seek(txid.start_ts());
+    auto iter = mv.Seek(txid.start_ts());
     if (iter != mv.MVV().end()) {
         sts.set_error_code(TxOpStatus_Code_Ok);
         v.CopyFrom(*(iter->second));
@@ -180,25 +184,39 @@ int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
     return cnt;
 }
 
-int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
+int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
+                             RegionMetric* regionMetric) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     int cnt = 0;
-    for (auto& it : datas) {
-        assert(!it.t2vs.empty());
+    for (const auto& it : datas) {
         if (_kvs.find(it.key) == _kvs.end()) {
             LOG(ERROR) << "UserKey: " << it.key
                        << " clear persist error due to no key in _kvs.";
+            goto out;
         }
-        auto n = _kvs[it.key].Truncate(it.t2vs.begin()->first);
-        cnt += n;
+
+        auto& mv = _kvs[it.key];
+        auto n = mv.Truncate(it.t2vs.begin()->first);
         if (it.t2vs.size() != n) {
             LOG(ERROR)
                 << "UserKey: " << it.key
                 << " clear persist error due to truncate number not match.";
+            goto out;
+        }
+
+        cnt += n;
+
+        if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
+            mv.Readers().empty()) {
+            _kvs.erase(it.key);
+            if (regionMetric) {
+                regionMetric->GCkm(it.key);
+            }
         }
     }
 
+out:
     return cnt;
 }
 
@@ -244,7 +262,9 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
         // go down
     }
 
-    CHECK_READ_WRITE_DEP(key, mv, txid, deps)
+    if (FLAGS_enable_dep_reporter) {
+        CHECK_READ_WRITE_DEP(key, mv, txid, deps)
+    }
 
     switch (lock_type) {
         case MVCCLock::WriteIntent:

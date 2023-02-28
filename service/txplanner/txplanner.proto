@@ -69,8 +69,15 @@ message GetMinATSResponse {
   optional uint64 min_ats = 1;
 }
 
-message RegionMetricRequest {
+message RegionMetric {
+  optional int64 read_qps = 1;
+  optional int64 write_qps = 2;
+  repeated string pessimism_key = 3;
+}
 
+message RegionMetricRequest {
+  optional azino.RangePB range = 1;
+  optional RegionMetric metric = 2;
 }
 
 message RegionMetricResponse {

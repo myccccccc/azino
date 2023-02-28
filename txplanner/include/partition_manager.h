@@ -1,6 +1,8 @@
 #ifndef AZINO_TXPLANNER_INCLUDE_PARTITION_MANAGER_H
 #define AZINO_TXPLANNER_INCLUDE_PARTITION_MANAGER_H
 
+#include <bthread/mutex.h>
+
 #include <map>
 #include <string>
 #include <utility>
@@ -13,9 +15,15 @@ namespace txplanner {
 class PartitionManager {
    public:
     PartitionManager(azino::Partition initial_partition);
-    inline azino::Partition GetPartition() { return partition; }
+    azino::Partition GetPartition();
+    void UpdatePartitionConfigMap(const RangeSet& to_del_ranges,
+                                  const PartitionConfigMap& to_add_ranges);
 
    private:
+    void apply_partition_config_map(const RangeSet& to_del_ranges,
+                                    const PartitionConfigMap& to_add_ranges);
+
+    bthread::Mutex m;
     azino::Partition partition;
 };
 }  // namespace txplanner

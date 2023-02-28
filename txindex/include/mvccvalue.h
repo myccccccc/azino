@@ -2,6 +2,7 @@
 #define AZINO_TXINDEX_INCLUDE_MVCCVALUE_H
 
 #include <butil/macros.h>
+#include <bvar/bvar.h>
 
 #include <functional>
 #include <string>
@@ -31,8 +32,7 @@ enum MVCCLock {
 
 class MVCCValue {
    public:
-    MVCCValue()
-        : _lock(MVCCLock::None), _lock_holder(), _lock_value(), _mvv() {}
+    MVCCValue();
     DISALLOW_COPY_AND_ASSIGN(MVCCValue);
     ~MVCCValue() = default;
     inline MVCCLock LockType() const { return _lock; }

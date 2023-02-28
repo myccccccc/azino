@@ -2,9 +2,8 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
-#include <toml/toml.hpp>
-
 DEFINE_string(server, "0.0.0.0:8000", "Address of server");
+DEFINE_string(log_file, "log_storage", "log file name for storage");
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
@@ -16,8 +15,15 @@ namespace storage {}  // namespace storage
 }  // namespace azino
 
 int main(int argc, char* argv[]) {
-    logging::FLAGS_crash_on_fatal_log = true;
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
+
+    logging::FLAGS_crash_on_fatal_log = true;
+    logging::LoggingSettings log_settings;
+    log_settings.logging_dest = logging::LoggingDestination::LOG_TO_FILE;
+    log_settings.log_file = FLAGS_log_file.c_str();
+    log_settings.delete_old =
+        logging::OldFileDeletionState::DELETE_OLD_LOG_FILE;
+    logging::InitLogging(log_settings);
 
     brpc::Server server;
 

@@ -67,5 +67,8 @@ void MVCCValue::WakeUpWaiters() {
     _waiters.clear();
 }
 
+MVCCValue::MVCCValue()
+    : _lock(MVCCLock::None), _lock_holder(), _lock_value(), _mvv() {}
+
 }  // namespace txindex
 }  // namespace azino

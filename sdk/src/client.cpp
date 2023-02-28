@@ -38,19 +38,18 @@
 
 DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
 
+static brpc::ChannelOptions channel_options;
+
 namespace azino {
 Transaction::Transaction(const Options& options,
                          const std::string& txplanner_addr)
-    : _options(options),
-      _channel_options(new brpc::ChannelOptions),
-      _txid(nullptr),
-      _txwritebuffer(new TxWriteBuffer) {
-    _channel_options->timeout_ms = FLAGS_timeout_ms;
+    : _options(options), _txid(nullptr), _txwritebuffer(nullptr) {
+    channel_options.timeout_ms = FLAGS_timeout_ms;
 
     std::stringstream ss;
     auto* channel = new brpc::Channel();
     int err;
-    err = channel->Init(txplanner_addr.c_str(), _channel_options.get());
+    err = channel->Init(txplanner_addr.c_str(), &channel_options);
     if (err) {
         LOG_CHANNEL_ERROR(txplanner_addr, err, ss)
         return;
@@ -78,43 +77,47 @@ Status Transaction::Begin() {
         return Status::NetworkErr(ss.str());
     }
 
-    LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
+    //    LOG_SDK(cntl, req, resp, BeginTx_from_txplanner)
 
     _txid.reset(resp.release_txid());
     if (_txid->status().status_code() != TxStatus_Code_Start) {
         ss << " Wrong tx status code: " << _txid->status().status_code();
         return Status::TxPlannerErr(ss.str());
     }
+    _txwritebuffer.reset(new TxWriteBuffer);
     auto partition = Partition::FromPB(resp.partition());
 
     // init storage channel
-    auto* channel = new brpc::Channel();
-    err = channel->Init(partition.GetStorage().c_str(), _channel_options.get());
-    if (err) {
-        LOG_CHANNEL_ERROR(partition.GetStorage().c_str(), err, ss)
-        return Status::NetworkErr(ss.str());
+    auto storage_addr = partition.GetStorage();
+    if (_channel_table.find(storage_addr) == _channel_table.end()) {
+        ChannelPtr channel(new brpc::Channel());
+        err = channel->Init(storage_addr.c_str(), &channel_options);
+        if (err) {
+            LOG_CHANNEL_ERROR(storage_addr.c_str(), err, ss)
+            return Status::NetworkErr(ss.str());
+        }
+        _channel_table.insert(std::make_pair(storage_addr, channel));
     }
-    _storage.reset(channel);
+    _storage = _channel_table.find(storage_addr)->second;
 
     // init txindex channels
     for (auto iter = partition.GetPartitionConfigMap().begin();
          iter != partition.GetPartitionConfigMap().end(); iter++) {
-        auto txindex_addr = iter->second.GetTxIndex();
+        auto& range = iter->first;
+        auto& partition_config = iter->second;
+        auto txindex_addr = partition_config.GetTxIndex();
         if (_channel_table.find(txindex_addr) == _channel_table.end()) {
-            ChannelPtr txindex_channel(new brpc::Channel());
-            err = txindex_channel->Init(txindex_addr.c_str(),
-                                        _channel_options.get());
+            ChannelPtr channel(new brpc::Channel());
+            err = channel->Init(txindex_addr.c_str(), &channel_options);
             if (err) {
                 LOG_CHANNEL_ERROR(txindex_addr, err, ss)
                 return Status::NetworkErr(ss.str());
             }
-            _channel_table.insert(
-                std::make_pair(txindex_addr, txindex_channel));
-            _txindexs.insert(std::make_pair(iter->first, txindex_channel));
-        } else {
-            _txindexs.insert(std::make_pair(
-                iter->first, _channel_table.find(txindex_addr)->second));
+            _channel_table.insert(std::make_pair(txindex_addr, channel));
         }
+        auto channel = _channel_table.find(txindex_addr)->second;
+        _route_table.insert(std::make_pair(
+            range, Region{channel, partition_config.GetPessimismKey()}));
     }
 
     return Status::Ok();
@@ -206,7 +209,7 @@ Status Transaction::PreputAll() {
          iter++) {
         assert(iter->second.status < TxWriteStatus::PREPUTED);
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
 
         brpc::Controller cntl;
         azino::txindex::WriteIntentRequest req;
@@ -246,7 +249,7 @@ Status Transaction::CommitAll() {
          iter++) {
         assert(iter->second.status == TxWriteStatus::PREPUTED);
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
 
         brpc::Controller cntl;
         azino::txindex::CommitRequest req;
@@ -286,7 +289,7 @@ Status Transaction::AbortAll() {
             continue;
         }
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).get());
+        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
 
         brpc::Controller cntl;
         azino::txindex::CleanRequest req;
@@ -316,27 +319,31 @@ Status Transaction::AbortAll() {
     return Status::Ok();
 }
 
-Status Transaction::Put(const WriteOptions& options, const UserKey& key,
+Status Transaction::Put(WriteOptions options, const UserKey& key,
                         const UserValue& value) {
     return Write(options, key, false, value);
 }
 
-Status Transaction::Delete(const WriteOptions& options, const UserKey& key) {
+Status Transaction::Delete(WriteOptions options, const UserKey& key) {
     return Write(options, key, true);
 }
 
-Status Transaction::Write(const WriteOptions& options, const UserKey& key,
+Status Transaction::Write(WriteOptions options, const UserKey& key,
                           bool is_delete, const UserValue& value) {
     std::stringstream ss;
     BEGIN_CHECK(write);
+    auto& region = Route(key);
 
     auto iter = _txwritebuffer->find(key);
+    if (options.type == kAutomatic && region.pk.find(key) != region.pk.end()) {
+        options.type = kPessimistic;
+    }
     if (options.type == kPessimistic &&
         (iter == _txwritebuffer->end() ||
          iter->second.status < TxWriteStatus::LOCKED)) {
         // Pessimistic
 
-        azino::txindex::TxOpService_Stub stub(Route(key).get());
+        azino::txindex::TxOpService_Stub stub(region.channel.get());
 
         brpc::Controller cntl;
         azino::txindex::WriteLockRequest req;
@@ -358,7 +365,6 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
                 iter->second.status = TxWriteStatus::LOCKED;
                 break;
             default:
-                // todo: fail to lock, may use some optimistic approach
                 ss << " Lock key: " << key << " value: " << value
                    << " is_delete: " << is_delete
                    << " error code: " << resp.tx_op_status().error_code()
@@ -372,7 +378,7 @@ Status Transaction::Write(const WriteOptions& options, const UserKey& key,
     return Status::Ok();
 }
 
-Status Transaction::Get(const ReadOptions& options, const UserKey& key,
+Status Transaction::Get(ReadOptions options, const UserKey& key,
                         UserValue& value) {
     std::stringstream ss;
     BEGIN_CHECK(read)
@@ -390,7 +396,7 @@ Status Transaction::Get(const ReadOptions& options, const UserKey& key,
         }
     }
 
-    azino::txindex::TxOpService_Stub stub(Route(key).get());
+    azino::txindex::TxOpService_Stub stub(Route(key).channel.get());
 
     brpc::Controller cntl;
     azino::txindex::ReadRequest req;
@@ -459,10 +465,10 @@ readStorage:
     }
 }
 
-ChannelPtr& Transaction::Route(const std::string& key) {
+Region& Transaction::Route(const std::string& key) {
     auto key_range = azino::Range(key, key, 1, 1);
-    auto iter = _txindexs.lower_bound(key_range);
-    if (iter == _txindexs.end() || !iter->first.Contains(key_range)) {
+    auto iter = _route_table.lower_bound(key_range);
+    if (iter == _route_table.end() || !iter->first.Contains(key_range)) {
         LOG(FATAL) << "Fail to route key:" << key;
     }
     return iter->second;
@@ -511,5 +517,11 @@ Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
                << " error message: " << storage_resp.status().error_message();
             return Status::StorageErr(storage_ss.str());
     }
+}
+
+void Transaction::Reset() {
+    _txid.reset();
+    _txwritebuffer.reset();
+    _route_table.clear();
 }
 }  // namespace azino

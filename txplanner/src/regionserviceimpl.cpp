@@ -7,7 +7,8 @@
 namespace azino {
 namespace txplanner {
 
-RegionServiceImpl::RegionServiceImpl(TxIDTable* tt) : _tt(tt) {}
+RegionServiceImpl::RegionServiceImpl(TxIDTable* tt, CCPlanner* plr)
+    : _tt(tt), _plr(plr) {}
 
 RegionServiceImpl::~RegionServiceImpl() {}
 
@@ -69,6 +70,13 @@ void RegionServiceImpl::RegionMetric(
     ::azino::txplanner::RegionMetricResponse* response,
     ::google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
+    brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
+    auto range = Range::FromPB(request->range());
+    _plr->ReportMetric(range, request->metric());
+
+    LOG(INFO) << cntl->remote_side() << " Region range:" << range.Describe()
+              << " metric:" << request->metric().ShortDebugString();
 }
 
 }  // namespace txplanner
