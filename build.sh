@@ -22,9 +22,9 @@ fi
 
 rc=0
 cd "${CURRENTDIR}" || exit
-rm -rf output && mkdir -p output/test && \
-find build | grep -E '(txindex_server|txplanner_server|storage_server|azino_client|dummy_bench|ycsb)$' | xargs -i cp -v {} output && \
-find build | grep -E '(test_[^\.]+)$' | xargs -i cp -v {} output/test && \
+rm -rf output && mkdir -p output/test
+find build | grep -E '(txindex_server|txplanner_server|storage_server|azino_client|dummy_bench|ycsb)$' | xargs -i cp -v {} output
+find build | grep -E '(test_[^\.]+)$' | xargs -i cp -v {} output/test
 cp -v run_all_tests.sh output/test
 cp -v setup.sh output
 cp -v kill.sh output

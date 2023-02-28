@@ -184,7 +184,8 @@ int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
     return cnt;
 }
 
-int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
+int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
+                             RegionMetric* regionMetric) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     int cnt = 0;
@@ -209,6 +210,9 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
         if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
             mv.Readers().empty()) {
             _kvs.erase(it.key);
+            if (regionMetric) {
+                regionMetric->GCkm(it.key);
+            }
         }
     }
 

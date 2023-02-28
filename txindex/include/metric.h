@@ -54,8 +54,9 @@ class RegionMetric : public azino::BackgroundTask {
     void RecordWrite(const std::string key, const TxOpStatus& write_status,
                      int64_t start_time);
 
+    void GCkm(const std::string& key);
+
    private:
-    void recordPessimismKey(const std::string& key);
     void report_metric();
     static void* execute(void* args);
 

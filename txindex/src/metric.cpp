@@ -55,6 +55,8 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
 void RegionMetric::RecordWrite(const std::string key,
                                const TxOpStatus &write_status,
                                int64_t start_time) {
+    std::lock_guard<bthread::Mutex> lck(m);
+
     auto &key_metric = km[key];
     auto latency = butil::gettimeofday_us() - start_time;
     write << latency;
@@ -70,7 +72,7 @@ void RegionMetric::RecordWrite(const std::string key,
     }
 
     if (key_metric.PessimismDegree() > FLAGS_lambda) {
-        recordPessimismKey(key);
+        pk.insert(key);
     }
 }
 
@@ -116,9 +118,9 @@ void *RegionMetric::execute(void *args) {
     return nullptr;
 }
 
-void RegionMetric::recordPessimismKey(const std::string &key) {
+void RegionMetric::GCkm(const std::string &key) {
     std::lock_guard<bthread::Mutex> lck(m);
-    pk.insert(key);
+    km.erase(key);
 }
 
 KeyMetric::KeyMetric()
