@@ -9,4 +9,4 @@ target_link_libraries(azino_client
                         azino_sdk::lib
                         azino::lib
                         ${BRPC_LIB}
-                        ${DYNAMIC_LIB})
+                        ${COMMON_LIB})

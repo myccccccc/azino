@@ -8,4 +8,4 @@ target_link_libraries(dummy_bench
         azino_sdk::lib
         azino::lib
         ${BRPC_LIB}
-        ${DYNAMIC_LIB})
+        ${COMMON_LIB})

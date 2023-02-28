@@ -21,7 +21,7 @@ target_link_libraries(txplanner_server
         azino_txplanner::lib
         azino::lib
         ${BRPC_LIB}
-        ${DYNAMIC_LIB})
+        ${COMMON_LIB})
 
 # build tests
 enable_testing()
@@ -32,7 +32,7 @@ target_link_libraries(test_txplanner
         azino::lib
         gtest_main
         ${BRPC_LIB}
-        ${DYNAMIC_LIB})
+        ${COMMON_LIB})
 
 include(GoogleTest)
 gtest_discover_tests(test_txplanner)
