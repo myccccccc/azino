@@ -51,7 +51,7 @@ class RegionMetric : public azino::BackgroundTask {
     ~RegionMetric() = default;
 
     void RecordRead(const TxOpStatus& read_status, int64_t start_time);
-    void RecordWrite(const std::string key, const TxOpStatus& write_status,
+    void RecordWrite(const std::string& key, const TxOpStatus& write_status,
                      int64_t start_time);
 
     void GCkm(const std::string& key);

@@ -52,7 +52,7 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
     //    }
 }
 
-void RegionMetric::RecordWrite(const std::string key,
+void RegionMetric::RecordWrite(const std::string &key,
                                const TxOpStatus &write_status,
                                int64_t start_time) {
     std::lock_guard<bthread::Mutex> lck(m);
