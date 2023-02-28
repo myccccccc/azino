@@ -44,8 +44,6 @@ class MVCCValue {
     void Clean();
     void Commit(const TxIdentifier& txid);
     inline MultiVersionValue& MVV() { return _mvv; }
-    void RecordWrite(bool err = false);
-    double PessimismDegree();
 
     MultiVersionValue::const_iterator LargestTSValue() const;
 
@@ -75,18 +73,6 @@ class MVCCValue {
     MultiVersionValue _mvv;
     ReaderMap _readers;
     std::vector<std::function<void()>> _waiters;
-
-    // key metrics
-    bvar::Adder<int> _write;  // total write num
-    bvar::Window<bvar::Adder<int>> _write_window;
-    bvar::Adder<int> _write_error;  // write error(conflict, too late) num
-    bvar::Window<bvar::Adder<int>> _write_error_window;
-
-    bvar::Adder<int> _tx_op_num;  // total tx operations number
-    bvar::Window<bvar::Adder<int>> _tx_op_num_window;
-    bvar::Adder<int>
-        _tx_op_after_write_num;  // total tx operations after write number
-    bvar::Window<bvar::Adder<int>> _tx_op_after_write_num_window;
 };
 }  // namespace txindex
 }  // namespace azino

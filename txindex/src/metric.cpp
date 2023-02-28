@@ -5,12 +5,18 @@
 
 #include "index.h"
 
-DEFINE_int32(region_metric_period_s, 3, "region metric period time");
+DEFINE_int32(region_metric_period_s, 2, "region metric period time");
 static bvar::GFlag gflag_region_metric_period_s("region_metric_period_s");
 DEFINE_bool(enable_region_metric_report, true,
             "enable region metric report to txplanner");
 static bvar::GFlag gflag_enable_region_metric_report(
     "enable_region_metric_report");
+
+DEFINE_double(alpha, 1,
+              "alpha hyper parameter when calculating keyPessimismDegree");
+static bvar::GFlag gflag_alpha("alpha");
+DEFINE_double(lambda, 0.6, "lambda hyper parameter");
+static bvar::GFlag gflag_lambda("lambda");
 
 namespace azino {
 namespace txindex {
@@ -46,17 +52,26 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
     //    }
 }
 
-void RegionMetric::RecordWrite(const TxOpStatus &write_status,
+void RegionMetric::RecordWrite(const std::string key,
+                               const TxOpStatus &write_status,
                                int64_t start_time) {
+    auto &key_metric = km[key];
     auto latency = butil::gettimeofday_us() - start_time;
     write << latency;
-    //    switch (write_status.error_code()) {
-    //        case TxOpStatus_Code_Ok:
-    //            write_success << latency;
-    //            break;
-    //        default:
-    //            write_error << latency;
-    //    }
+    key_metric.RecordWrite();
+
+    switch (write_status.error_code()) {
+        case TxOpStatus_Code_Ok:
+            //                write_success << latency;
+            break;
+        default:
+            //                write_error << latency;
+            key_metric.RecordWriteError();
+    }
+
+    if (key_metric.PessimismDegree() > FLAGS_lambda) {
+        recordPessimismKey(key);
+    }
 }
 
 void RegionMetric::report_metric() {
@@ -101,10 +116,28 @@ void *RegionMetric::execute(void *args) {
     return nullptr;
 }
 
-void RegionMetric::RecordPessimismKey(const std::string &key) {
+void RegionMetric::recordPessimismKey(const std::string &key) {
     std::lock_guard<bthread::Mutex> lck(m);
     pk.insert(key);
 }
 
+KeyMetric::KeyMetric()
+    : _write(),
+      _write_window(&_write, FLAGS_region_metric_period_s),
+      _write_error(),
+      _write_error_window(&_write_error, FLAGS_region_metric_period_s),
+      _tx_op_num(),
+      _tx_op_num_window(&_tx_op_num, FLAGS_region_metric_period_s),
+      _tx_op_after_write_num(),
+      _tx_op_after_write_num_window(&_tx_op_after_write_num,
+                                    FLAGS_region_metric_period_s) {}
+
+double KeyMetric::PessimismDegree() {
+    auto c = (double)_write_error_window.get_value() /
+             (double)_write_window.get_value();
+    auto l = (double)_tx_op_after_write_num.get_value() /
+             (double)_tx_op_num_window.get_value();
+    return FLAGS_alpha * c + (1 - FLAGS_alpha) * l;
+}
 }  // namespace txindex
 }  // namespace azino

@@ -22,6 +22,28 @@ DECLARE_bool(enable_region_metric_report);
 namespace azino {
 namespace txindex {
 class KVRegion;
+
+class KeyMetric {
+   public:
+    KeyMetric();
+    inline void RecordWrite() { _write << 1; }
+    inline void RecordWriteError() { _write_error << 1; }
+    double PessimismDegree();
+
+   private:
+    // key metrics
+    bvar::Adder<int> _write;  // total write num
+    bvar::Window<bvar::Adder<int>> _write_window;
+    bvar::Adder<int> _write_error;  // write error(conflict, too late) num
+    bvar::Window<bvar::Adder<int>> _write_error_window;
+
+    bvar::Adder<int> _tx_op_num;  // total tx operations number
+    bvar::Window<bvar::Adder<int>> _tx_op_num_window;
+    bvar::Adder<int>
+        _tx_op_after_write_num;  // total tx operations after write number
+    bvar::Window<bvar::Adder<int>> _tx_op_after_write_num_window;
+};
+
 class RegionMetric : public azino::BackgroundTask {
    public:
     RegionMetric(KVRegion* region, brpc::Channel* txplaner_channel);
@@ -29,10 +51,11 @@ class RegionMetric : public azino::BackgroundTask {
     ~RegionMetric() = default;
 
     void RecordRead(const TxOpStatus& read_status, int64_t start_time);
-    void RecordWrite(const TxOpStatus& write_status, int64_t start_time);
-    void RecordPessimismKey(const std::string& key);
+    void RecordWrite(const std::string key, const TxOpStatus& write_status,
+                     int64_t start_time);
 
    private:
+    void recordPessimismKey(const std::string& key);
     void report_metric();
     static void* execute(void* args);
 
@@ -50,6 +73,7 @@ class RegionMetric : public azino::BackgroundTask {
     //    bvar::LatencyRecorder read_success;  // read success latency(us)
 
     bthread::Mutex m;
+    std::unordered_map<std::string, KeyMetric> km;
     std::unordered_set<std::string> pk;  // pessimism key
 
     KVRegion* _region;

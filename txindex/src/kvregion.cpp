@@ -51,7 +51,7 @@ TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
         _kvbs[bucket_num].WriteLock(key, txid, callback, deps, is_lock_update);
     DO_RW_DEP_REPORT(deps);
     if (!is_lock_update) {
-        _metric.RecordWrite(sts, start_time);
+        _metric.RecordWrite(key, sts, start_time);
     }
     return sts;
 }
@@ -67,7 +67,7 @@ TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
                                              is_lock_update);
     DO_RW_DEP_REPORT(deps);
     if (!is_lock_update) {
-        _metric.RecordWrite(sts, start_time);
+        _metric.RecordWrite(key, sts, start_time);
     }
     return sts;
 }
