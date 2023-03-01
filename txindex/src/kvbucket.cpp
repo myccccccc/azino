@@ -9,6 +9,8 @@
 #include "index.h"
 
 DECLARE_bool(enable_dep_reporter);
+DEFINE_int32(max_data_to_persist_per_round, 1000,
+             "max data to persist per round");
 
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \
@@ -173,6 +175,9 @@ int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
     std::lock_guard<bthread::Mutex> lck(_latch);
     int cnt = 0;
     for (auto& it : _kvs) {
+        if (cnt > FLAGS_max_data_to_persist_per_round) {
+            break;
+        }
         txindex::DataToPersist d(it.first, it.second.Seek2(min_ats),
                                  it.second.MVV().end());
         if (d.t2vs.size() == 0) {
