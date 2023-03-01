@@ -44,6 +44,7 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
     read << latency;
     switch (read_status.error_code()) {
         case TxOpStatus_Code_Ok:
+        case TxOpStatus_Code_NotExist:
             read_success << latency;
             break;
         default:
@@ -88,6 +89,8 @@ void RegionMetric::report_metric() {
         {
             std::lock_guard<bthread::Mutex> lck(m);
             for (const auto &key : pk) {
+                LOG(NOTICE) << "Region:" << _region->Describe()
+                            << " pessimism_key:" << key;
                 metric->add_pessimism_key(key);
             }
             pk.clear();
