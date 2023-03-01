@@ -11,6 +11,7 @@
 DECLARE_bool(enable_dep_reporter);
 DEFINE_int32(max_data_to_persist_per_round, 1000,
              "max data to persist per round");
+DEFINE_bool(first_commit_wins, false, "first commit wins");
 
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \
@@ -234,7 +235,16 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
     std::stringstream ss;
     MVCCValue& mv = _kvs[key];
 
-    CHECK_WRITE_TOO_LATE(lock_type)
+    if (mv.LockType() == MVCCLock::WriteLock &&
+        lock_type == MVCCLock::WriteIntent &&
+        mv.LockHolder().start_ts() == txid.start_ts()) {
+        is_lock_update = true;
+        goto out;
+    }
+
+    if (FLAGS_first_commit_wins || lock_type == MVCCLock::WriteIntent) {
+        CHECK_WRITE_TOO_LATE(lock_type)
+    }
 
     if (mv.LockType() != MVCCLock::None) {
         ss << "Tx(" << txid.ShortDebugString() << ") write " << lock_type
@@ -254,19 +264,16 @@ TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
             sts.set_error_message(ss.str());
             LOG(INFO) << ss.str();
             return sts;
-        } else if (mv.LockType() == lock_type) {
+        } else {
             ss << " repeated";
             sts.set_error_code(TxOpStatus_Code_Ok);
             sts.set_error_message(ss.str());
             LOG(WARNING) << ss.str();
             return sts;
         }
-
-        // change write_lock to write_intent
-        is_lock_update = true;
-        // go down
     }
 
+out:
     if (FLAGS_enable_dep_reporter) {
         CHECK_READ_WRITE_DEP(key, mv, txid, deps)
     }

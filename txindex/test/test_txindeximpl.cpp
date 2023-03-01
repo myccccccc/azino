@@ -8,6 +8,8 @@
 #include "persist.h"
 #include "service/storage/storage.pb.h"
 
+DECLARE_bool(first_commit_wins);
+
 class TxIndexImplTest : public testing::Test {
    public:
     TxIndexImplTest() {
@@ -162,6 +164,10 @@ TEST_F(TxIndexImplTest, write_lock_ok) {
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
                       deps, is_lock_update)
             .error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
+                  .error_code());
+    ASSERT_TRUE(is_lock_update);
 
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update)
@@ -221,6 +227,21 @@ TEST_F(TxIndexImplTest, write_lock_block) {
 }
 
 TEST_F(TxIndexImplTest, write_lock_too_late) {
+    std::vector<azino::txindex::Dep> deps;
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
+                  .error_code());
+    t2.set_commit_ts(4);
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
+                      deps, is_lock_update)
+            .error_code());
+}
+
+TEST_F(TxIndexImplTest, write_lock_too_late2) {
+    FLAGS_first_commit_wins = true;
     std::vector<azino::txindex::Dep> deps;
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
