@@ -62,16 +62,16 @@ class RegionMetric : public azino::BackgroundTask {
 
     // write
     bvar::LatencyRecorder write;  // total write latency(us)
-                                  //    bvar::LatencyRecorder
-    //        write_error;  // write error(conflict, too late, block)
-    //        latency(us)
-    //    bvar::LatencyRecorder write_success;  // write success latency(us)
+
+    bvar::LatencyRecorder
+        write_error;  // write error(conflict, too late, block) latency(us)
+    bvar::LatencyRecorder write_success;  // write success latency(us)
 
     // read
     bvar::LatencyRecorder read;  // total read latency(us)
-                                 //    bvar::LatencyRecorder
-    //        read_error;  // read error(not exist, block) latency(us)
-    //    bvar::LatencyRecorder read_success;  // read success latency(us)
+    bvar::LatencyRecorder
+        read_error;  // read error(not exist, block) latency(us)
+    bvar::LatencyRecorder read_success;  // read success latency(us)
 
     bthread::Mutex m;
     std::unordered_map<std::string, KeyMetric> km;
