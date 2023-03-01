@@ -25,15 +25,15 @@
               << " response: " << resp.ShortDebugString()                     \
               << " latency= " << cntl.latency_us() << "us" << std::endl;
 
-#define BEGIN_CHECK(action)                                     \
-    if (!_txid) {                                               \
-        ss << " Transaction has not began.";                    \
-        return Status::IllegalTxOp(ss.str());                   \
-    }                                                           \
-    if (_txid->status().status_code() != TxStatus_Code_Start) { \
-        ss << " Transaction is not allowed to " << #action      \
-           << _txid->ShortDebugString();                        \
-        return Status::IllegalTxOp(ss.str());                   \
+#define BEGIN_CHECK(action)                                    \
+    if (!_txid) {                                              \
+        ss << " Transaction has not began.";                   \
+        return Status::IllegalTxOp(ss.str());                  \
+    }                                                          \
+    if (_txid->status().status_code() < TxStatus_Code_Start) { \
+        ss << " Transaction is not allowed to " << #action     \
+           << _txid->ShortDebugString();                       \
+        return Status::IllegalTxOp(ss.str());                  \
     }
 
 DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
