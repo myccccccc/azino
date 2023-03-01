@@ -26,8 +26,8 @@ int main(int argc, char* argv[]) {
         logging::OldFileDeletionState::DELETE_OLD_LOG_FILE;
     logging::InitLogging(log_settings);
 
-    azino::Options options;
-    azino::Transaction tx(options, FLAGS_txplanner_addr);
+    azino::Options options{FLAGS_txplanner_addr};
+    azino::Transaction tx(options);
 
     int i = 0;
     while (i++ < FLAGS_round_num) {

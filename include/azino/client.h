@@ -39,7 +39,7 @@ typedef std::map<Range, Region, RangeComparator> PartitionRouteTable;
 // not thread safe
 class Transaction {
    public:
-    Transaction(const Options& options, const std::string& txplanner_addr);
+    Transaction(const Options& options);
     DISALLOW_COPY_AND_ASSIGN(Transaction);
     ~Transaction();
 

@@ -10,8 +10,8 @@ int main(int argc, char* argv[]) {
     // Parse gflags. We recommend you to use gflags as well.
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
 
-    azino::Options options;
-    azino::Transaction tx(options, FLAGS_txplanner_addr);
+    azino::Options options{FLAGS_txplanner_addr};
+    azino::Transaction tx(options);
 
     while (true) {
         while (true) {

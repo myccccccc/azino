@@ -41,17 +41,16 @@ DEFINE_int32(timeout_ms, -1, "RPC timeout in milliseconds");
 static brpc::ChannelOptions channel_options;
 
 namespace azino {
-Transaction::Transaction(const Options& options,
-                         const std::string& txplanner_addr)
+Transaction::Transaction(const Options& options)
     : _options(options), _txid(nullptr), _txwritebuffer(nullptr) {
     channel_options.timeout_ms = FLAGS_timeout_ms;
 
     std::stringstream ss;
     auto* channel = new brpc::Channel();
     int err;
-    err = channel->Init(txplanner_addr.c_str(), &channel_options);
+    err = channel->Init(options.txplanner_addr.c_str(), &channel_options);
     if (err) {
-        LOG_CHANNEL_ERROR(txplanner_addr, err, ss)
+        LOG_CHANNEL_ERROR(options.txplanner_addr, err, ss)
         return;
     }
     _txplanner.reset(channel);
