@@ -15,7 +15,7 @@ static bvar::GFlag gflag_enable_region_metric_report(
 DEFINE_double(alpha, 1,
               "alpha hyper parameter when calculating keyPessimismDegree");
 static bvar::GFlag gflag_alpha("alpha");
-DEFINE_double(lambda, 0, "lambda hyper parameter");
+DEFINE_double(lambda, 0.3, "lambda hyper parameter");
 static bvar::GFlag gflag_lambda("lambda");
 
 namespace azino {
@@ -89,9 +89,12 @@ void RegionMetric::report_metric() {
         {
             std::lock_guard<bthread::Mutex> lck(m);
             for (const auto &key : pk) {
-                LOG(NOTICE) << "Region:" << _region->Describe()
-                            << " pessimism_key:" << key;
                 metric->add_pessimism_key(key);
+            }
+            if (metric->pessimism_key_size() != 0) {
+                LOG(NOTICE)
+                    << "Region:" << _region->Describe()
+                    << " pessimism_key size:" << metric->pessimism_key_size();
             }
             pk.clear();
         }
@@ -137,11 +140,24 @@ KeyMetric::KeyMetric()
                                     FLAGS_region_metric_period_s) {}
 
 double KeyMetric::PessimismDegree() {
-    auto c = (double)_write_error_window.get_value() /
-             (double)_write_window.get_value();
-    auto l = (double)_tx_op_after_write_num.get_value() /
-             (double)_tx_op_num_window.get_value();
-    return FLAGS_alpha * c + (1 - FLAGS_alpha) * l;
+    double write_error_window = (double)_write_error_window.get_value();
+    double write_window = (double)_write_window.get_value();
+    double c = (int)write_window == 0 ? 0 : write_error_window / write_window;
+
+    double tx_op_after_write_num_window =
+        (double)_tx_op_after_write_num_window.get_value();
+    double tx_op_num_window = (double)_tx_op_num_window.get_value();
+    double l = (int)tx_op_num_window == 0
+                   ? 0
+                   : tx_op_after_write_num_window / tx_op_num_window;
+
+    double res = FLAGS_alpha * c + (1 - FLAGS_alpha) * l;
+
+    LOG(NOTICE) << write_error_window << " " << write_window << " " << c << " "
+                << tx_op_after_write_num_window << " " << tx_op_num_window
+                << " " << l << " " << res;
+    return res;
 }
+
 }  // namespace txindex
 }  // namespace azino
