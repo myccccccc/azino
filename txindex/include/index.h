@@ -145,8 +145,9 @@ class KVBucket {
                     std::function<void()> callback, Deps& deps);
     int GetPersisting(std::vector<txindex::DataToPersist>& datas,
                       uint64_t min_ats);
-    int ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
-                       RegionMetric* regionMetric = nullptr);
+    int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
+
+    void gc_mv(RegionMetric* regionMetric);
 
    private:
     TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,

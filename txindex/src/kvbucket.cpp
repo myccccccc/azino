@@ -171,6 +171,24 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     return sts;
 }
 
+void KVBucket::gc_mv(RegionMetric* regionMetric) {
+    std::lock_guard<bthread::Mutex> lck(_latch);
+
+    std::vector<std::string> gc_keys;
+    for (auto& it : _kvs) {
+        auto& mv = it.second;
+        if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
+            mv.Readers().empty()) {
+            gc_keys.push_back(it.first);
+        }
+    }
+
+    for (auto& key : gc_keys) {
+        _kvs.erase(key);
+        regionMetric->GCkm(key);
+    }
+}
+
 int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
                             uint64_t min_ats) {
     std::lock_guard<bthread::Mutex> lck(_latch);
@@ -190,8 +208,7 @@ int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
     return cnt;
 }
 
-int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
-                             RegionMetric* regionMetric) {
+int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     int cnt = 0;
@@ -212,14 +229,6 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas,
         }
 
         cnt += n;
-
-        if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
-            mv.Readers().empty()) {
-            _kvs.erase(it.key);
-            if (regionMetric) {
-                regionMetric->GCkm(it.key);
-            }
-        }
     }
 
 out:
