@@ -5,11 +5,12 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include "azino/background_task.h"
 #include "txid.h"
 
 namespace azino {
 namespace txplanner {
-class TxMetric {
+class TxMetric : public BackgroundTask {
    public:
     TxMetric();
     DISALLOW_COPY_AND_ASSIGN(TxMetric);
@@ -19,6 +20,9 @@ class TxMetric {
     void RecordAbort(const TxIDPtr& t);
 
    private:
+    static void* execute(void*);
+
+    void dump();
     bvar::LatencyRecorder commit;  // total commit latency(ms)
     bvar::LatencyRecorder abort;   // total abort latency(ms)
 };
