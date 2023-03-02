@@ -183,6 +183,9 @@ void KVBucket::gc_mv(RegionMetric* regionMetric) {
         }
     }
 
+    if (!gc_keys.empty()) {
+        LOG(NOTICE) << "GC MV Size:" << gc_keys.size();
+    }
     for (auto& key : gc_keys) {
         _kvs.erase(key);
         regionMetric->GCkm(key);

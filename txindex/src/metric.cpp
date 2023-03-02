@@ -153,9 +153,9 @@ double KeyMetric::PessimismDegree() {
 
     double res = FLAGS_alpha * c + (1 - FLAGS_alpha) * l;
 
-    LOG(NOTICE) << write_error_window << " " << write_window << " " << c << " "
-                << tx_op_after_write_num_window << " " << tx_op_num_window
-                << " " << l << " " << res;
+    LOG(NOTICE) << "Key Metric:" << write_error_window << " " << write_window
+                << " " << c << " " << tx_op_after_write_num_window << " "
+                << tx_op_num_window << " " << l << " " << res;
     return res;
 }
 
