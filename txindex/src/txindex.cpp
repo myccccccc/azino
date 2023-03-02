@@ -93,8 +93,8 @@ void TxIndex::init_region_table(const Partition &p) {
         }
         _region_table.insert(std::make_pair(
             range, new KVRegion(range, &_storage_channel, _txplaner_channel)));
-        LOG(INFO) << "TxIndex:" << FLAGS_txindex_addr
-                  << " add partition:" << range.Describe();
+        LOG(WARNING) << "TxIndex:" << FLAGS_txindex_addr
+                     << " add partition:" << range.Describe();
     }
 }
 
