@@ -124,8 +124,8 @@ void *RegionMetric::execute(void *args) {
 }
 
 void RegionMetric::GCkm(const std::string &key) {
-    std::lock_guard<bthread::Mutex> lck(m);
-    km.erase(key);
+    //    std::lock_guard<bthread::Mutex> lck(m);
+    //    km.erase(key);
 }
 
 KeyMetric::KeyMetric()
