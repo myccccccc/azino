@@ -3,8 +3,8 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
+DEFINE_string(listen_addr, "0.0.0.0:8001", "Listen addr");
 DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
-DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",
               "Addresses of txindexes, split by space");
 DEFINE_int64(partition_num_per_txindex, 64, "partitions number in one txindex");
@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
     }
 
     brpc::ServerOptions options;
-    if (server.Start(FLAGS_txplanner_addr.c_str(), &options) != 0) {
+    if (server.Start(FLAGS_listen_addr.c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to start TxPlannerServer";
         return -1;
     }

@@ -6,6 +6,7 @@
 #include "index.h"
 #include "service.h"
 
+DEFINE_string(listen_addr, "0.0.0.0:8002", "Addresses of txindex");
 DEFINE_string(txindex_addr, "0.0.0.0:8002", "Addresses of txindex");
 DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(log_file, "log_txindex", "log file name for txindex");
@@ -44,7 +45,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    if (server.Start(FLAGS_txindex_addr.c_str(), &server_options) != 0) {
+    if (server.Start(FLAGS_listen_addr.c_str(), &server_options) != 0) {
         LOG(FATAL) << "Fail to start TxIndexServer";
         return -1;
     }
