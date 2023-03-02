@@ -22,14 +22,20 @@ void TxMetric::RecordAbort(const TxIDPtr &t) {
 }
 
 void TxMetric::dump() {
-    LOG(WARNING) << commit;
-    LOG(WARNING) << abort;
+    LOG(WARNING) << "commit:" << commit
+                 << " P50:" << commit.latency_percentile(0.5)
+                 << " P90:" << commit.latency_percentile(0.9)
+                 << " P99:" << commit.latency_percentile(0.99);
+    LOG(WARNING) << "abort:" << abort
+                 << " P50:" << abort.latency_percentile(0.5)
+                 << " P90:" << abort.latency_percentile(0.9)
+                 << " P99:" << abort.latency_percentile(0.99);
 }
 
 void *TxMetric::execute(void *args) {
     auto p = reinterpret_cast<TxMetric *>(args);
     while (true) {
-        bthread_usleep(1 * 1000);
+        bthread_usleep(1 * 1000 * 1000);
         {
             std::lock_guard<bthread::Mutex> lck(p->_mutex);
             if (p->_stopped) {
