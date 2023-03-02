@@ -15,8 +15,6 @@ static bvar::GFlag gflag_enable_region_metric_report(
 DEFINE_double(alpha, 1,
               "alpha hyper parameter when calculating keyPessimismDegree");
 static bvar::GFlag gflag_alpha("alpha");
-DEFINE_double(lambda, 0.3, "lambda hyper parameter");
-static bvar::GFlag gflag_lambda("lambda");
 
 namespace azino {
 namespace txindex {
@@ -42,6 +40,7 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
                               int64_t start_time) {
     auto latency = butil::gettimeofday_us() - start_time;
     read << latency;
+
     switch (read_status.error_code()) {
         case TxOpStatus_Code_Ok:
         case TxOpStatus_Code_NotExist:
@@ -55,12 +54,8 @@ void RegionMetric::RecordRead(const TxOpStatus &read_status,
 void RegionMetric::RecordWrite(const std::string &key,
                                const TxOpStatus &write_status,
                                int64_t start_time) {
-    std::lock_guard<bthread::Mutex> lck(m);
-
-    auto &key_metric = km[key];
     auto latency = butil::gettimeofday_us() - start_time;
     write << latency;
-    key_metric.RecordWrite();
 
     switch (write_status.error_code()) {
         case TxOpStatus_Code_Ok:
@@ -68,11 +63,6 @@ void RegionMetric::RecordWrite(const std::string &key,
             break;
         default:
             write_error << latency;
-            key_metric.RecordWriteError();
-    }
-
-    if (key_metric.PessimismDegree() > FLAGS_lambda) {
-        pk.insert(key);
     }
 }
 
@@ -123,9 +113,9 @@ void *RegionMetric::execute(void *args) {
     return nullptr;
 }
 
-void RegionMetric::GCkm(const std::string &key) {
-    //    std::lock_guard<bthread::Mutex> lck(m);
-    //    km.erase(key);
+void RegionMetric::RecordPessKey(const std::string &key) {
+    std::lock_guard<bthread::Mutex> lck(m);
+    pk.insert(key);
 }
 
 KeyMetric::KeyMetric()

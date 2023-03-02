@@ -54,7 +54,7 @@ class RegionMetric : public azino::BackgroundTask {
     void RecordWrite(const std::string& key, const TxOpStatus& write_status,
                      int64_t start_time);
 
-    void GCkm(const std::string& key);
+    void RecordPessKey(const std::string& key);
 
    private:
     void report_metric();
@@ -74,7 +74,6 @@ class RegionMetric : public azino::BackgroundTask {
     bvar::LatencyRecorder read_success;  // read success latency(us)
 
     bthread::Mutex m;
-    std::unordered_map<std::string, KeyMetric> km;
     std::unordered_set<std::string> pk;  // pessimism key
 
     KVRegion* _region;

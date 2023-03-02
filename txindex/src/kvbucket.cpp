@@ -39,22 +39,25 @@ DEFINE_bool(first_commit_wins, false, "first commit wins");
         }                                                                  \
     } while (0);
 
+DEFINE_double(lambda, 0.3, "lambda hyper parameter");
+static bvar::GFlag gflag_lambda("lambda");
+
 namespace azino {
 namespace txindex {
 
 TxOpStatus KVBucket::WriteLock(const std::string& key, const TxIdentifier& txid,
                                std::function<void()> callback, Deps& deps,
-                               bool& is_lock_update) {
+                               bool& is_lock_update, bool& is_pess_key) {
     return Write(MVCCLock::WriteLock, txid, key, Value::default_instance(),
-                 callback, deps, is_lock_update);
+                 callback, deps, is_lock_update, is_pess_key);
 }
 
 TxOpStatus KVBucket::WriteIntent(const std::string& key, const Value& v,
                                  const TxIdentifier& txid,
                                  std::function<void()> callback, Deps& deps,
-                                 bool& is_lock_update) {
+                                 bool& is_lock_update, bool& is_pess_key) {
     return Write(MVCCLock::WriteIntent, txid, key, v, callback, deps,
-                 is_lock_update);
+                 is_lock_update, is_pess_key);
 }
 
 TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
@@ -62,7 +65,7 @@ TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
 
     TxOpStatus sts;
     std::stringstream ss;
-    MVCCValue& mv = _kvs[key];
+    MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() == MVCCLock::None ||
         mv.LockHolder().start_ts() != txid.start_ts()) {
@@ -87,7 +90,7 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
     TxOpStatus sts;
     std::stringstream ss;
 
-    MVCCValue& mv = _kvs[key];
+    MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() != MVCCLock::WriteIntent ||
         mv.LockHolder().start_ts() != txid.start_ts()) {
@@ -114,7 +117,7 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     TxOpStatus sts;
     std::stringstream ss;
 
-    MVCCValue& mv = _kvs[key];
+    MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() != MVCCLock::None &&
         mv.LockHolder().start_ts() == txid.start_ts()) {
@@ -176,7 +179,7 @@ void KVBucket::gc_mv(RegionMetric* regionMetric) {
 
     std::vector<std::string> gc_keys;
     for (auto& it : _kvs) {
-        auto& mv = it.second;
+        auto& mv = it.second.mv;
         if (mv.Size() == 0 && mv.LockType() == MVCCLock::None &&
             mv.Readers().empty()) {
             gc_keys.push_back(it.first);
@@ -188,7 +191,6 @@ void KVBucket::gc_mv(RegionMetric* regionMetric) {
     }
     for (auto& key : gc_keys) {
         _kvs.erase(key);
-        regionMetric->GCkm(key);
     }
 }
 
@@ -200,8 +202,8 @@ int KVBucket::GetPersisting(std::vector<txindex::DataToPersist>& datas,
         if (cnt > FLAGS_max_data_to_persist_per_round) {
             break;
         }
-        txindex::DataToPersist d(it.first, it.second.Seek2(min_ats),
-                                 it.second.MVV().end());
+        auto& mv = it.second.mv;
+        txindex::DataToPersist d(it.first, mv.Seek2(min_ats), mv.MVV().end());
         if (d.t2vs.size() == 0) {
             continue;
         }
@@ -222,7 +224,7 @@ int KVBucket::ClearPersisted(const std::vector<txindex::DataToPersist>& datas) {
             goto out;
         }
 
-        auto& mv = _kvs[it.key];
+        auto& mv = _kvs[it.key].mv;
         auto n = mv.Truncate(it.t2vs.begin()->first);
         if (it.t2vs.size() != n) {
             LOG(ERROR)
@@ -241,11 +243,31 @@ out:
 TxOpStatus KVBucket::Write(MVCCLock lock_type, const TxIdentifier& txid,
                            const std::string& key, const Value& v,
                            std::function<void()> callback, Deps& deps,
-                           bool& is_lock_update) {
+                           bool& is_lock_update, bool& is_pess_key) {
     std::lock_guard<bthread::Mutex> lck(_latch);
+    ValueAndMetric& vm = _kvs[key];
+    TxOpStatus sts =
+        write(vm, lock_type, txid, key, v, callback, deps, is_lock_update);
+    if (!is_lock_update) {
+        KeyMetric& km = vm.km;
+        km.RecordWrite();
+        if (sts.error_code() != TxOpStatus_Code_Ok) {
+            km.RecordWriteError();
+        }
+        if (km.PessimismDegree() > FLAGS_lambda) {
+            is_pess_key = true;
+        }
+    }
+    return sts;
+}
+
+TxOpStatus KVBucket::write(ValueAndMetric& vm, MVCCLock lock_type,
+                           const TxIdentifier& txid, const std::string& key,
+                           const Value& v, std::function<void()> callback,
+                           Deps& deps, bool& is_lock_update) {
     TxOpStatus sts;
     std::stringstream ss;
-    MVCCValue& mv = _kvs[key];
+    MVCCValue& mv = vm.mv;
 
     if (mv.LockType() == MVCCLock::WriteLock &&
         lock_type == MVCCLock::WriteIntent &&
@@ -304,5 +326,6 @@ out:
     sts.set_error_code(TxOpStatus_Code_Ok);
     return sts;
 }
+
 }  // namespace txindex
 }  // namespace azino

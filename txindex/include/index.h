@@ -126,6 +126,11 @@ class TxIndex {
     PartitionManager _pm;
 };
 
+typedef struct {
+    KeyMetric km;
+    MVCCValue mv;
+} ValueAndMetric;
+
 class KVBucket {
    public:
     KVBucket() = default;
@@ -134,11 +139,11 @@ class KVBucket {
 
     TxOpStatus WriteLock(const std::string& key, const TxIdentifier& txid,
                          std::function<void()> callback, Deps& deps,
-                         bool& is_lock_update);
+                         bool& is_lock_update, bool& is_pess_key);
     TxOpStatus WriteIntent(const std::string& key, const Value& v,
                            const TxIdentifier& txid,
                            std::function<void()> callback, Deps& deps,
-                           bool& is_lock_update);
+                           bool& is_lock_update, bool& is_pess_key);
     TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
@@ -153,9 +158,14 @@ class KVBucket {
     TxOpStatus Write(MVCCLock lock_type, const TxIdentifier& txid,
                      const std::string& key, const Value& v,
                      std::function<void()> callback, Deps& deps,
+                     bool& is_lock_update, bool& is_pess_key);
+
+    TxOpStatus write(ValueAndMetric& vm, MVCCLock lock_type,
+                     const TxIdentifier& txid, const std::string& key,
+                     const Value& v, std::function<void()> callback, Deps& deps,
                      bool& is_lock_update);
 
-    std::unordered_map<std::string, MVCCValue> _kvs;
+    std::unordered_map<std::string, ValueAndMetric> _kvs;
     bthread::Mutex _latch;
 };
 
