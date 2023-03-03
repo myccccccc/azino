@@ -1,6 +1,7 @@
 #ifndef AZINO_STORAGE_INCLUDE_STORAGE_H
 #define AZINO_STORAGE_INCLUDE_STORAGE_H
 
+#include <butil/logging.h>
 #include <butil/macros.h>
 
 #include <sstream>
