@@ -16,8 +16,6 @@ void TxOpServiceImpl::WriteIntent(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
-    std::string key = request->key();
-
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteIntent(request->key(), request->value(), request->txid(),
                             std::bind(&TxOpServiceImpl::WriteIntent, this,
@@ -46,8 +44,6 @@ void TxOpServiceImpl::WriteLock(
     ::google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-
-    std::string key = request->key();
 
     TxOpStatus* sts = new TxOpStatus(
         _index->WriteLock(request->key(), request->txid(),
@@ -114,7 +110,6 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
     Value* v = new Value();
-    std::string key = request->key();
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,
