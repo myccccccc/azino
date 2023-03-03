@@ -13,19 +13,23 @@ DEFINE_int32(max_data_to_persist_per_round, 1000,
              "max data to persist per round");
 DEFINE_bool(first_commit_wins, false, "first commit wins");
 
+#define LOG_WRITE_ERROR(type)                                                \
+    LOG(INFO) << "Tx(" << txid.ShortDebugString() << ") write " << lock_type \
+              << " on key: " << key << " find lock type: " << mv.LockType()  \
+              << " Tx(" << mv.LockHolder().ShortDebugString() << ") "        \
+              << #type;
+
 #define CHECK_WRITE_TOO_LATE(type)                                       \
     do {                                                                 \
         auto iter = mv.LargestTSValue();                                 \
         if (iter != mv.MVV().end() &&                                    \
             iter->first.commit_ts() >= txid.start_ts()) {                \
-            ss << "Tx(" << txid.ShortDebugString() << ") write " << type \
-               << " on "                                                 \
-               << "key: " << key << " too late. "                        \
-               << "Find "                                                \
-               << "largest version: " << iter->first.ShortDebugString()  \
-               << " value: " << iter->second->ShortDebugString();        \
+            LOG(INFO) << "Tx(" << txid.ShortDebugString() << ") write "  \
+                      << type << " on key: " << key << " too late. "     \
+                      << "Find largest version: "                        \
+                      << iter->first.ShortDebugString()                  \
+                      << " value: " << iter->second->ShortDebugString(); \
             sts.set_error_code(TxOpStatus_Code_WriteTooLate);            \
-            sts.set_error_message(ss.str());                             \
             return sts;                                                  \
         }                                                                \
     } while (0);
@@ -64,16 +68,13 @@ TxOpStatus KVBucket::Clean(const std::string& key, const TxIdentifier& txid) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
-    std::stringstream ss;
     MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() == MVCCLock::None ||
         mv.LockHolder().start_ts() != txid.start_ts()) {
-        ss << "Tx(" << txid.ShortDebugString() << ") clean on "
-           << "key: " << key << " not exist. ";
         sts.set_error_code(TxOpStatus_Code_NotExist);
-        sts.set_error_message(ss.str());
-        LOG(ERROR) << ss.str();
+        LOG(ERROR) << "Tx(" << txid.ShortDebugString() << ") clean on "
+                   << "key: " << key << " not exist. ";
         return sts;
     }
 
@@ -88,17 +89,14 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
-    std::stringstream ss;
 
     MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() != MVCCLock::WriteIntent ||
         mv.LockHolder().start_ts() != txid.start_ts()) {
-        ss << "Tx(" << txid.ShortDebugString() << ") commit on "
-           << "key: " << key << " not exist. ";
         sts.set_error_code(TxOpStatus_Code_NotExist);
-        sts.set_error_message(ss.str());
-        LOG(ERROR) << ss.str();
+        LOG(ERROR) << "Tx(" << txid.ShortDebugString() << ") commit on "
+                   << "key: " << key << " not exist. ";
         return sts;
     }
 
@@ -115,32 +113,27 @@ TxOpStatus KVBucket::Read(const std::string& key, Value& v,
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
-    std::stringstream ss;
 
     MVCCValue& mv = _kvs[key].mv;
 
     if (mv.LockType() != MVCCLock::None &&
         mv.LockHolder().start_ts() == txid.start_ts()) {
-        ss << "Tx(" << txid.ShortDebugString() << ") read on "
-           << "key: " << key << " not exist. "
-           << "Find it's own lock type" << mv.LockType()
-           << " Tx: " << mv.LockHolder().ShortDebugString();
         sts.set_error_code(TxOpStatus_Code_NotExist);
-        sts.set_error_message(ss.str());
-        LOG(ERROR) << ss.str();
+        LOG(ERROR) << "Tx(" << txid.ShortDebugString() << ") read on "
+                   << "key: " << key << " not exist. "
+                   << "Find it's own lock type" << mv.LockType()
+                   << " Tx: " << mv.LockHolder().ShortDebugString();
         return sts;
     }
 
     if (mv.LockType() == MVCCLock::WriteIntent &&
         mv.LockHolder().start_ts() < txid.start_ts()) {
-        ss << "Tx(" << txid.ShortDebugString() << ") read on "
-           << "key: " << key << " blocked. "
-           << "Find lock type: " << mv.LockType()
-           << " Tx: " << mv.LockHolder().ShortDebugString();
         sts.set_error_code(TxOpStatus_Code_ReadBlock);
-        sts.set_error_message(ss.str());
         mv.AddWaiter(callback);
-        LOG(INFO) << ss.str();
+        LOG(INFO) << "Tx(" << txid.ShortDebugString() << ") read on "
+                  << "key: " << key << " blocked. "
+                  << "Find lock type: " << mv.LockType()
+                  << " Tx: " << mv.LockHolder().ShortDebugString();
         return sts;
     }
 
@@ -266,7 +259,6 @@ TxOpStatus KVBucket::write(ValueAndMetric& vm, MVCCLock lock_type,
                            const Value& v, std::function<void()> callback,
                            Deps& deps, bool& is_lock_update) {
     TxOpStatus sts;
-    std::stringstream ss;
     MVCCValue& mv = vm.mv;
 
     if (mv.LockType() == MVCCLock::WriteLock &&
@@ -281,28 +273,18 @@ TxOpStatus KVBucket::write(ValueAndMetric& vm, MVCCLock lock_type,
     }
 
     if (mv.LockType() != MVCCLock::None) {
-        ss << "Tx(" << txid.ShortDebugString() << ") write " << lock_type
-           << " on "
-           << "key: " << key << " find lock type: " << mv.LockType() << " Tx("
-           << mv.LockHolder().ShortDebugString() << ")";
         if (mv.LockHolder().start_ts() < txid.start_ts()) {
+            LOG_WRITE_ERROR(block)
             mv.AddWaiter(callback);
-            ss << " blocked";
             sts.set_error_code(TxOpStatus_Code_WriteBlock);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
             return sts;
         } else if (mv.LockHolder().start_ts() > txid.start_ts()) {
-            ss << " conflict";
+            LOG_WRITE_ERROR(conflict)
             sts.set_error_code(TxOpStatus_Code_WriteConflicts);
-            sts.set_error_message(ss.str());
-            LOG(INFO) << ss.str();
             return sts;
         } else {
-            ss << " repeated";
+            LOG_WRITE_ERROR(repeated)
             sts.set_error_code(TxOpStatus_Code_Ok);
-            sts.set_error_message(ss.str());
-            LOG(WARNING) << ss.str();
             return sts;
         }
     }
