@@ -104,19 +104,22 @@ class Storage {
             bool isMatch = found_internal_key.UserKey() == key;
             bool isDeleted = found_internal_key.IsDelete();
             if (!isValid) {
-                LOG(ERROR) << " Fail to find mvcc key: " << key << " read ts: " << ts;
+                LOG(ERROR) << " Fail to find mvcc key: " << key
+                           << " read ts: " << ts;
                 ss.set_error_code(StorageStatus_Code_Corruption);
                 return ss;
             } else if (!isMatch) {
-                LOG(INFO) << " Not found mvcc key: " << key << " read ts: " << ts
+                LOG(INFO) << " Not found mvcc key: " << key
+                          << " read ts: " << ts
                           << " found key: " << found_internal_key.UserKey()
                           << " found ts: " << seeked_ts
                           << " found value: " << found_value;
                 ss.set_error_code(StorageStatus_Code_NotFound);
                 return ss;
             } else if (isDeleted) {
-                LOG(INFO) << " Not found mvcc key: " << key << " read ts: " << ts
-                          << " found ts: " << seeked_ts << " who's value is deleted";
+                LOG(INFO) << " Not found mvcc key: " << key
+                          << " read ts: " << ts << " found ts: " << seeked_ts
+                          << " who's value is deleted";
                 ss.set_error_code(StorageStatus_Code_NotFound);
                 return ss;
             } else {
