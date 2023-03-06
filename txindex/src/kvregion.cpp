@@ -54,7 +54,7 @@ TxOpStatus KVRegion::WriteLock(const std::string& key, const TxIdentifier& txid,
     if (!is_lock_update) {
         _metric.RecordWrite(key, sts, start_time);
     }
-    if (is_pess_key) {
+    if (is_pess_key && FLAGS_enable_region_metric_report) {
         _metric.RecordPessKey(key);
     }
     return sts;
@@ -74,7 +74,7 @@ TxOpStatus KVRegion::WriteIntent(const std::string& key, const Value& value,
     if (!is_lock_update) {
         _metric.RecordWrite(key, sts, start_time);
     }
-    if (is_pess_key) {
+    if (is_pess_key && FLAGS_enable_region_metric_report) {
         _metric.RecordPessKey(key);
     }
     return sts;
