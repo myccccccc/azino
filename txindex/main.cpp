@@ -15,6 +15,10 @@ namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
 
+namespace bthread {
+DECLARE_int32(bthread_concurrency);
+}
+
 int main(int argc, char* argv[]) {
     GFLAGS_NS::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -29,6 +33,7 @@ int main(int argc, char* argv[]) {
 
     brpc::Server server;
     brpc::ServerOptions server_options;
+    server_options.num_threads = bthread::FLAGS_bthread_concurrency;
     brpc::Channel txplanner_channel;
     brpc::ChannelOptions options;
 
