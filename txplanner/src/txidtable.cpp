@@ -245,9 +245,13 @@ TxIDTable::TxIDTable() : gc(this), metric() {
     if (FLAGS_enable_gc) {
         gc.Start();
     }
+    metric.Start();
 }
 
-TxIDTable::~TxIDTable() { gc.Stop(); }
+TxIDTable::~TxIDTable() {
+    gc.Stop();
+    metric.Stop();
+}
 
 TimeStamp TxIDTable::GetMinATS() {
     std::lock_guard<bthread::Mutex> lck(_lock);

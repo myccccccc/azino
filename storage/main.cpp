@@ -2,7 +2,7 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
-DEFINE_string(server, "0.0.0.0:8000", "Address of server");
+DEFINE_string(listen_addr, "0.0.0.0:8000", "Listen addr");
 DEFINE_string(log_file, "log_storage", "log file name for storage");
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
     }
 
     brpc::ServerOptions options;
-    if (server.Start(FLAGS_server.c_str(), &options) != 0) {
+    if (server.Start(FLAGS_listen_addr.c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to start StorageServer";
         return -1;
     }

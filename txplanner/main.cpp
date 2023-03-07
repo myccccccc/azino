@@ -3,18 +3,19 @@
 #include <butil/logging.h>
 #include <gflags/gflags.h>
 
+DEFINE_string(listen_addr, "0.0.0.0:8001", "Listen addr");
 DEFINE_string(storage_addr, "0.0.0.0:8000", "Address of storage");
-DEFINE_string(txplanner_addr, "0.0.0.0:8001", "Address of txplanner");
 DEFINE_string(txindex_addrs, "0.0.0.0:8002",
               "Addresses of txindexes, split by space");
-DEFINE_int32(partition_num_per_txindex, 3, "partitions number in one txindex");
-DEFINE_int32(kv_len, 16, "key value length in partition endpoint");
+DEFINE_int64(partition_num_per_txindex, 64, "partitions number in one txindex");
+DEFINE_int64(record_count, 100000, "total record count");
 DEFINE_string(log_file, "log_txplanner", "log file name for txplanner");
 
 namespace logging {
 DECLARE_bool(crash_on_fatal_log);
 }
 
+#include "azino/comparator.h"
 #include "planner.h"
 #include "service.h"
 #include "txidtable.h"
@@ -41,28 +42,43 @@ int main(int argc, char* argv[]) {
         txindex_addr.clear();
     }
 
-    std::unordered_set<std::string> partition_endpoint_set;
-    while (partition_endpoint_set.size() <
-           txindex_addrs.size() * FLAGS_partition_num_per_txindex - 1) {
-        partition_endpoint_set.insert(butil::fast_rand_printable(FLAGS_kv_len));
+    std::vector<std::string> records;
+    for (int i = 0; i < FLAGS_record_count; i++) {
+        records.push_back(std::to_string(i));
     }
-    std::deque<std::string> partition_endpoint(partition_endpoint_set.begin(),
-                                               partition_endpoint_set.end());
-    std::sort(partition_endpoint.begin(), partition_endpoint.end());
-    partition_endpoint.emplace_front("");
-    partition_endpoint.emplace_back("");
+
+    azino::BitWiseComparator cmp;
+    std::sort(records.begin(), records.end(), cmp);
+
+    int partition_record_count =
+        records.size() /
+        (txindex_addrs.size() * FLAGS_partition_num_per_txindex);
+    std::deque<std::string> partition_endpoints;
+    for (int i = partition_record_count; i < records.size();
+         i += partition_record_count) {
+        partition_endpoints.push_back(records[i]);
+    }
+
+    if (partition_endpoints.size() >
+        (txindex_addrs.size() * FLAGS_partition_num_per_txindex) - 1) {
+        partition_endpoints.pop_back();
+    }
+
+    partition_endpoints.emplace_front("");
+    partition_endpoints.emplace_back("");
 
     azino::PartitionConfigMap pcm;
     size_t index = 0;
     for (auto& txindex_addr : txindex_addrs) {
-        for (auto i = 0; i < FLAGS_partition_num_per_txindex; i++) {
-            auto range = azino::Range(partition_endpoint[index],
-                                      partition_endpoint[index + 1], 1, 0);
+        for (auto i = 0; i < FLAGS_partition_num_per_txindex &&
+                         index < partition_endpoints.size() - 1;
+             i++, index++) {
+            auto range = azino::Range(partition_endpoints[index],
+                                      partition_endpoints[index + 1], 1, 0);
             pcm.insert(
                 std::make_pair(range, azino::PartitionConfig(txindex_addr)));
-            LOG(INFO) << "Txindex:" << txindex_addr
-                      << " Range:" << range.Describe();
-            index++;
+            LOG(WARNING) << "Txindex:" << txindex_addr << " Range" << i << ":"
+                         << range.Describe();
         }
     }
 
@@ -92,7 +108,7 @@ int main(int argc, char* argv[]) {
     }
 
     brpc::ServerOptions options;
-    if (server.Start(FLAGS_txplanner_addr.c_str(), &options) != 0) {
+    if (server.Start(FLAGS_listen_addr.c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to start TxPlannerServer";
         return -1;
     }

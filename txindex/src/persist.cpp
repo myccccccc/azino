@@ -50,6 +50,7 @@ void RegionPersist::persist() {
 
     size_t persist_bucket_num =
         (_last_persist_bucket_num + 1) % _region->KVBuckets().size();
+    _region->KVBuckets()[persist_bucket_num].gc_mv(&_region->_metric);
     auto cnt =
         _region->KVBuckets()[persist_bucket_num].GetPersisting(datas, _min_ats);
     if (cnt == 0) {
@@ -81,8 +82,7 @@ void RegionPersist::persist() {
                    << resp.status().error_code()
                    << " error msg: " << resp.status().error_message();
     } else {
-        _region->KVBuckets()[persist_bucket_num].ClearPersisted(
-            datas, &_region->_metric);
+        _region->KVBuckets()[persist_bucket_num].ClearPersisted(datas);
     }
 
 out:

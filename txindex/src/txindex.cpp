@@ -1,5 +1,8 @@
 #include "index.h"
 
+DEFINE_int32(storage_timeout_ms, 10000,
+             "RPC timeout in milliseconds when access storage");
+
 namespace azino {
 namespace txindex {
 TxIndex::TxIndex(brpc::Channel *txplaner_channel)
@@ -90,13 +93,14 @@ void TxIndex::init_region_table(const Partition &p) {
         }
         _region_table.insert(std::make_pair(
             range, new KVRegion(range, &_storage_channel, _txplaner_channel)));
-        LOG(INFO) << "TxIndex:" << FLAGS_txindex_addr
-                  << " add partition:" << range.Describe();
+        LOG(WARNING) << "TxIndex:" << FLAGS_txindex_addr
+                     << " add partition:" << range.Describe();
     }
 }
 
 void TxIndex::init_storage(const Partition &p) {
     brpc::ChannelOptions options;
+    options.timeout_ms = FLAGS_storage_timeout_ms;
     if (_storage_channel.Init(p.GetStorage().c_str(), &options) != 0) {
         LOG(FATAL) << "Fail to initialize storage channel";
     }

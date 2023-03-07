@@ -1,6 +1,7 @@
 #ifndef AZINO_STORAGE_INCLUDE_STORAGE_H
 #define AZINO_STORAGE_INCLUDE_STORAGE_H
 
+#include <butil/logging.h>
 #include <butil/macros.h>
 
 #include <sstream>
@@ -97,7 +98,6 @@ class Storage {
         auto internal_key = InternalKey(key, ts, false);
         std::string found_key, found_value;
         StorageStatus ss = Seek(internal_key.Encode(), found_key, found_value);
-        std::stringstream strs;
 
         if (ss.error_code() == StorageStatus::Ok) {
             auto found_internal_key = InternalKey(found_key);
@@ -105,37 +105,35 @@ class Storage {
             bool isMatch = found_internal_key.UserKey() == key;
             bool isDeleted = found_internal_key.IsDelete();
             if (!isValid) {
+                LOG(ERROR) << " Fail to find mvcc key: " << key
+                           << " read ts: " << ts;
                 ss.set_error_code(StorageStatus_Code_Corruption);
-                strs << " Fail to find mvcc key: " << key << " read ts: " << ts;
-                ss.set_error_message(strs.str());
                 return ss;
             } else if (!isMatch) {
+                LOG(INFO) << " Not found mvcc key: " << key
+                          << " read ts: " << ts
+                          << " found key: " << found_internal_key.UserKey()
+                          << " found ts: " << seeked_ts
+                          << " found value: " << found_value;
                 ss.set_error_code(StorageStatus_Code_NotFound);
-                strs << " Not found mvcc key: " << key << " read ts: " << ts
-                     << " found key: " << found_internal_key.UserKey()
-                     << " found ts: " << seeked_ts
-                     << " found value: " << found_value;
-                ss.set_error_message(strs.str());
                 return ss;
             } else if (isDeleted) {
+                LOG(INFO) << " Not found mvcc key: " << key
+                          << " read ts: " << ts << " found ts: " << seeked_ts
+                          << " who's value is deleted";
                 ss.set_error_code(StorageStatus_Code_NotFound);
-                strs << " Not found mvcc key: " << key << " read ts: " << ts
-                     << " found ts: " << seeked_ts << " who's value is deleted";
-                ss.set_error_message(strs.str());
                 return ss;
             } else {
+                LOG(INFO) << " Found mvcc key: " << key << " read ts: " << ts;
                 value = found_value;
                 seeked_ts = found_internal_key.TS();
                 ss.set_error_code(StorageStatus_Code_Ok);
-                strs << " Found mvcc key: " << key << " read ts: " << ts;
-                ss.set_error_message(strs.str());
                 return ss;
             }
         } else if (ss.error_code() == StorageStatus::NotFound) {
+            LOG(INFO) << " Not found mvcc key: " << key << " read ts: " << ts
+                      << " db iter ends ";
             ss.set_error_code(StorageStatus_Code_NotFound);
-            strs << " Not found mvcc key: " << key << " read ts: " << ts
-                 << " db iter ends ";
-            ss.set_error_message(strs.str());
             return ss;
         } else {
             return ss;
@@ -151,11 +149,9 @@ class Storage {
             auto found_internal_key = InternalKey(found_key);
             bool isValid = found_internal_key.Valid();
             if (!isValid) {
+                LOG(ERROR) << " Fail to find mvcc key: " << key
+                           << " read ts: " << MIN_TIMESTAMP;
                 ss.set_error_code(StorageStatus_Code_Corruption);
-                std::stringstream str;
-                str << " Fail to find mvcc key: " << key
-                    << " read ts: " << MIN_TIMESTAMP;
-                ss.set_error_message(str.str());
                 return ss;
             }
             next_key = found_internal_key.UserKey();
@@ -184,11 +180,9 @@ class Storage {
                     bool isMatch = found_internal_key.UserKey() == next_key;
                     bool isDeleted = found_internal_key.IsDelete();
                     if (!isValid) {
+                        LOG(ERROR) << " Fail to find mvcc key: " << next_key
+                                   << " read ts: " << ts;
                         ss.set_error_code(StorageStatus_Code_Corruption);
-                        std::stringstream str;
-                        str << " Fail to find mvcc key: " << next_key
-                            << " read ts: " << ts;
-                        ss.set_error_message(str.str());
                         goto out;
                     }
                     if (!isMatch) {

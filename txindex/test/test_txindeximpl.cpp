@@ -8,6 +8,8 @@
 #include "persist.h"
 #include "service/storage/storage.pb.h"
 
+DECLARE_bool(first_commit_wins);
+
 class TxIndexImplTest : public testing::Test {
    public:
     TxIndexImplTest() {
@@ -23,6 +25,7 @@ class TxIndexImplTest : public testing::Test {
     std::string k2 = "key2";
     azino::Value v2;
     bool is_lock_update;
+    bool is_pess_key;
 
     void dummyCallback() {
         LOG(INFO) << "Calling dummy call back.";
@@ -74,64 +77,71 @@ TEST_F(TxIndexImplTest, dummy) {
 
 TEST_F(TxIndexImplTest, write_intent_ok) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_FALSE(is_lock_update);
 
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k2, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_TRUE(is_lock_update);
 }
 
 TEST_F(TxIndexImplTest, write_intent_conflicts) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_WriteConflicts,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_WriteConflicts,
-        ti->WriteLock(k1, t1, nullptr, deps, is_lock_update).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t2).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_WriteConflicts,
+              ti->WriteLock(k1, t1, nullptr, deps, is_lock_update, is_pess_key)
                   .error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t2).error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
 }
 
 TEST_F(TxIndexImplTest, write_intent_block) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_WriteBlock,
               ti->WriteIntent(k1, v2, t2,
                               std::bind(&TxIndexImplTest::dummyCallback, this),
-                              deps, is_lock_update)
+                              deps, is_lock_update, is_pess_key)
                   .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t1).error_code());
     waitDummyCallback();
     ASSERT_TRUE(Called());
     UnCalled();
 
-    ASSERT_EQ(
-        azino::TxOpStatus_Code_Ok,
-        ti->WriteLock(k2, t1, nullptr, deps, is_lock_update).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteLock(k2, t1, nullptr, deps, is_lock_update, is_pess_key)
+                  .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_WriteBlock,
               ti->WriteIntent(k2, v2, t2,
                               std::bind(&TxIndexImplTest::dummyCallback, this),
-                              deps, is_lock_update)
+                              deps, is_lock_update, is_pess_key)
                   .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k2, t1).error_code());
     waitDummyCallback();
@@ -140,14 +150,16 @@ TEST_F(TxIndexImplTest, write_intent_block) {
 
 TEST_F(TxIndexImplTest, write_intent_too_late) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t2.set_commit_ts(4);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_WriteTooLate,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_WriteTooLate,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
 }
 
 TEST_F(TxIndexImplTest, write_lock_ok) {
@@ -155,50 +167,58 @@ TEST_F(TxIndexImplTest, write_lock_ok) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
+    ASSERT_TRUE(is_lock_update);
 
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k2, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
 }
 
 TEST_F(TxIndexImplTest, write_lock_conflicts) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(
-        azino::TxOpStatus_Code_Ok,
-        ti->WriteLock(k1, t2, nullptr, deps, is_lock_update).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_WriteConflicts,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteLock(k1, t2, nullptr, deps, is_lock_update, is_pess_key)
                   .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_WriteConflicts,
-        ti->WriteLock(k1, t1, nullptr, deps, is_lock_update).error_code());
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_WriteConflicts,
+              ti->WriteLock(k1, t1, nullptr, deps, is_lock_update, is_pess_key)
+                  .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t2).error_code());
-    ASSERT_EQ(
-        azino::TxOpStatus_Code_Ok,
-        ti->WriteLock(k1, t1, nullptr, deps, is_lock_update).error_code());
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
+              ti->WriteLock(k1, t1, nullptr, deps, is_lock_update, is_pess_key)
+                  .error_code());
 }
 
 TEST_F(TxIndexImplTest, write_lock_block) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_WriteBlock,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t1).error_code());
     waitDummyCallback();
@@ -208,12 +228,12 @@ TEST_F(TxIndexImplTest, write_lock_block) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k2, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_WriteBlock,
         ti->WriteLock(k2, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k2, t1).error_code());
     waitDummyCallback();
@@ -222,15 +242,32 @@ TEST_F(TxIndexImplTest, write_lock_block) {
 
 TEST_F(TxIndexImplTest, write_lock_too_late) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
+    t2.set_commit_ts(4);
+    ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
+                      deps, is_lock_update, is_pess_key)
+            .error_code());
+}
+
+TEST_F(TxIndexImplTest, write_lock_too_late2) {
+    FLAGS_first_commit_wins = true;
+    std::vector<azino::txindex::Dep> deps;
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t2.set_commit_ts(4);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
     ASSERT_EQ(
         azino::TxOpStatus_Code_WriteTooLate,
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
 }
 
@@ -240,12 +277,13 @@ TEST_F(TxIndexImplTest, clean_not_exist) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Clean(k1, t1).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Clean(k1, t1).error_code());
 }
 
@@ -254,18 +292,19 @@ TEST_F(TxIndexImplTest, clean_ok) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k1, t1).error_code());
 
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k2, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k2, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Clean(k2, t1).error_code());
 }
 
@@ -275,41 +314,45 @@ TEST_F(TxIndexImplTest, commit_not_exist) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t1).error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t2).error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist, ti->Commit(k1, t1).error_code());
 }
 
 TEST_F(TxIndexImplTest, commit_ok) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
 
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k2, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k2, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k2, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t2.set_commit_ts(4);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k2, t2).error_code());
 }
 
 TEST_F(TxIndexImplTest, read_ok) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
     azino::Value read_value;
@@ -323,9 +366,10 @@ TEST_F(TxIndexImplTest, read_ok) {
 
     azino::TxIdentifier t3;
     t3.set_start_ts(4);
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t3, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t3, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t3.set_commit_ts(5);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t3).error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
@@ -343,9 +387,10 @@ TEST_F(TxIndexImplTest, read_ok) {
 
 TEST_F(TxIndexImplTest, read_block) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t1.set_commit_ts(2);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
     azino::TxIdentifier read_tx_3;
@@ -357,7 +402,7 @@ TEST_F(TxIndexImplTest, read_block) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t3, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     azino::Value read_value;
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
@@ -370,9 +415,10 @@ TEST_F(TxIndexImplTest, read_block) {
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
     ASSERT_EQ(v1.content(), read_value.content());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t3, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t3, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->Read(k1, read_value, read_tx_3,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
@@ -408,15 +454,16 @@ TEST_F(TxIndexImplTest, read_not_exist) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t1, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
                   .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(azino::TxOpStatus_Code_NotExist,
               ti->Read(k1, read_value, t1,
                        std::bind(&TxIndexImplTest::dummyCallback, this), deps)
@@ -445,9 +492,10 @@ TEST_F(TxIndexImplTest, read_not_exist) {
 TEST_F(TxIndexImplTest, persist) {
     std::vector<azino::txindex::Dep> deps;
     std::vector<azino::txindex::DataToPersist> datas;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     ASSERT_EQ(0, ti->GetPersisting(datas, MAX_TIMESTAMP));
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
@@ -456,11 +504,12 @@ TEST_F(TxIndexImplTest, persist) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t2.set_commit_ts(5);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
 
@@ -496,16 +545,18 @@ TEST_F(TxIndexImplTest, persist) {
 
 TEST_F(TxIndexImplTest, read_dep_report) {
     std::vector<azino::txindex::Dep> deps;
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t1.set_commit_ts(3);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t1).error_code());
 
     t2.set_start_ts(5);
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
     t2.set_commit_ts(6);
     ASSERT_EQ(azino::TxOpStatus_Code_Ok, ti->Commit(k1, t2).error_code());
 
@@ -514,7 +565,7 @@ TEST_F(TxIndexImplTest, read_dep_report) {
     ASSERT_EQ(azino::TxOpStatus_Code_Ok,
               ti->WriteLock(k1, write_tx_7,
                             std::bind(&TxIndexImplTest::dummyCallback, this),
-                            deps, is_lock_update)
+                            deps, is_lock_update, is_pess_key)
                   .error_code());
 
     azino::TxIdentifier read_tx_2;
@@ -541,9 +592,10 @@ TEST_F(TxIndexImplTest, write_dep_report) {
     azino::Value read_value;
     ASSERT_EQ(ti->Read(k1, read_value, t1, NULL, deps).error_code(),
               azino::TxOpStatus_Code_NotExist);
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v1, t1, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
 
     ASSERT_EQ(1, deps.size());
     ASSERT_EQ(t1.start_ts(), deps[0].t1.start_ts());
@@ -564,7 +616,7 @@ TEST_F(TxIndexImplTest, write_dep_report) {
     ASSERT_EQ(
         azino::TxOpStatus_Code_Ok,
         ti->WriteLock(k1, t2, std::bind(&TxIndexImplTest::dummyCallback, this),
-                      deps, is_lock_update)
+                      deps, is_lock_update, is_pess_key)
             .error_code());
 
     ASSERT_EQ(2, deps.size());
@@ -576,9 +628,10 @@ TEST_F(TxIndexImplTest, write_dep_report) {
     ASSERT_EQ(azino::txindex::DepType::READWRITE, deps[1].type);
 
     deps.clear();
-    ASSERT_EQ(azino::TxOpStatus_Code_Ok,
-              ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update)
-                  .error_code());
+    ASSERT_EQ(
+        azino::TxOpStatus_Code_Ok,
+        ti->WriteIntent(k1, v2, t2, nullptr, deps, is_lock_update, is_pess_key)
+            .error_code());
 
     ASSERT_EQ(2, deps.size());
     ASSERT_EQ(read_tx_4.start_ts(), deps[0].t1.start_ts());
