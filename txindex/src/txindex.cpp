@@ -60,7 +60,7 @@ TxOpStatus TxIndex::Commit(const std::string &key, const TxIdentifier &txid) {
 
 TxOpStatus TxIndex::Read(const std::string &key, Value &v,
                          const TxIdentifier &txid,
-                         std::function<void()> callback) {
+                         std::function<void()> callback, bool lock) {
     auto region = route(key);
     if (region == nullptr) {
         LOG(WARNING) << "Fail to route key:" << key;
@@ -68,7 +68,7 @@ TxOpStatus TxIndex::Read(const std::string &key, Value &v,
         sts.set_error_code(TxOpStatus_Code_PartitionErr);
         return sts;
     }
-    return region->Read(key, v, txid, callback);
+    return region->Read(key, v, txid, callback, lock);
 }
 
 KVRegionPtr TxIndex::route(const std::string &key) {

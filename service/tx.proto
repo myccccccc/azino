@@ -4,12 +4,11 @@ package azino;
 message TxOpStatus {
   enum Code {
     Ok = 0;
-    WriteConflicts = 1;
-    WriteTooLate = 2;
-    WriteBlock = 3;
-    ReadBlock = 4;
-    NotExist = 5;
-    PartitionErr = 6;
+    Conflicts = 1;
+    TooLate = 2;
+    Block = 3;
+    NotExist = 4;
+    PartitionErr = 5;
   };
   optional Code error_code = 1 [default = Ok];
   optional string error_message = 2;

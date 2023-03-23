@@ -8,7 +8,7 @@
 #include "service/tx.pb.h"
 #include "service/txindex/txindex.pb.h"
 #include "service/txplanner/txplanner.pb.h"
-#include "txwritebuffer.h"
+#include "txrwbuffer.h"
 
 #define LOG_WRONG_TX_STATUS_CODE(ss, op)              \
     ss << " Wrong tx status code when " << #op << ":" \
@@ -46,7 +46,7 @@ static brpc::ChannelOptions channel_options;
 
 namespace azino {
 Transaction::Transaction(const Options& options)
-    : _options(options), _txid(nullptr), _txwritebuffer(nullptr) {
+    : _options(options), _txid(nullptr), _txrwbuffer(nullptr) {
     channel_options.timeout_ms = FLAGS_timeout_ms;
 
     auto* channel = new brpc::Channel();
@@ -89,7 +89,7 @@ Status Transaction::Begin() {
         LOG_WRONG_TX_STATUS_CODE(ss, begin)
         return Status::TxPlannerErr(ss.str());
     }
-    _txwritebuffer.reset(new TxWriteBuffer);
+    _txrwbuffer.reset(new TxRWBuffer);
     auto partition = Partition::FromPB(resp.partition());
 
     // init storage channel
@@ -209,125 +209,167 @@ Status Transaction::Commit() {
     }
 }
 
-Status Transaction::PreputAll() {
-    // todo: parallelize preputing
-    for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
-         iter++) {
-        assert(iter->second.status < TxWriteStatus::PREPUTED);
+Status Transaction::preput(const std::string& key, TxRW& tx_rw) {
+    azino::txindex::TxOpService_Stub stub(Route(key).channel.get());
+    brpc::Controller cntl;
+    azino::txindex::WriteIntentRequest req;
+    azino::txindex::WriteIntentResponse resp;
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
-
-        brpc::Controller cntl;
-        azino::txindex::WriteIntentRequest req;
-        azino::txindex::WriteIntentResponse resp;
-        req.set_allocated_txid(new TxIdentifier(*_txid));
-        req.set_key(iter->first);
-        req.set_allocated_value(new Value(iter->second.value));
-        stub.WriteIntent(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::stringstream ss;
-            LOG_CONTROLLER_ERROR(cntl, ss)
-            return Status::NetworkErr(ss.str());
-        }
-
-        LOG_SDK(cntl, req, resp, WriteIntent_from_txindex)
-
-        switch (resp.tx_op_status().error_code()) {
-            case TxOpStatus_Code_Ok:
-                iter->second.status = TxWriteStatus::PREPUTED;
-                break;
-            default:
-                std::stringstream ss;
-                ss << " Preput key: "
-                   << iter->first
-                   //                   << " value: " <<
-                   //                   iter->second.value.ShortDebugString()
-                   << " error code: " << resp.tx_op_status().error_code()
-                   << " error message: " << resp.tx_op_status().error_message();
-                return Status::TxIndexErr(ss.str());
-        }
+    req.set_allocated_txid(new TxIdentifier(*_txid));
+    req.set_key(key);
+    req.set_allocated_value(new Value(tx_rw.Value()));
+    stub.WriteIntent(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        std::stringstream ss;
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
     }
 
+    LOG_SDK(cntl, req, resp, WriteIntent_from_txindex)
+
+    switch (resp.tx_op_status().error_code()) {
+        case TxOpStatus_Code_Ok:
+            tx_rw.Status() = PREPUTED;
+            break;
+        default:
+            std::stringstream ss;
+            ss << " Preput key: " << key
+               << " error code: " << resp.tx_op_status().error_code()
+               << " error message: " << resp.tx_op_status().error_message();
+            return Status::TxIndexErr(ss.str());
+    }
+}
+
+Status Transaction::PreputAll() {
+    auto sts = Status::Ok();
+
+    // todo: parallelize preputing
+    for (auto iter = _txrwbuffer->begin(); iter != _txrwbuffer->end(); iter++) {
+        std::string value;
+        auto& key = iter->first;
+        auto& tx_rw = iter->second;
+
+        switch (tx_rw.Type()) {
+            case SERIALIZABLE_READ:
+                sts = read(key, value, tx_rw, true);
+                break;
+            case WRITE:
+                sts = preput(key, tx_rw);
+                break;
+            case READ:
+            default:
+                continue;
+        }
+
+        if (!sts.IsOk()) {
+            return sts;
+        }
+    }
     return Status::Ok();
+}
+
+Status Transaction::commit(const std::string& key, TxRW& tx_rw) {
+    azino::txindex::TxOpService_Stub stub(Route(key).channel.get());
+
+    brpc::Controller cntl;
+    azino::txindex::CommitRequest req;
+    azino::txindex::CommitResponse resp;
+    req.set_allocated_txid(new TxIdentifier(*_txid));
+    req.set_key(key);
+    stub.Commit(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        std::stringstream ss;
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
+    }
+
+    LOG_SDK(cntl, req, resp, Commit_from_txindex)
+
+    switch (resp.tx_op_status().error_code()) {
+        case TxOpStatus_Code_Ok:
+            tx_rw.Status() = COMMITTED;
+            break;
+        default:
+            std::stringstream ss;
+            ss << " Commit key: " << key
+               << " error code: " << resp.tx_op_status().error_code()
+               << " error message: " << resp.tx_op_status().error_message();
+            return Status::TxIndexErr(ss.str());
+    }
 }
 
 Status Transaction::CommitAll() {
+    auto sts = Status::Ok();
+
     // todo: parallelize committing
-    for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
-         iter++) {
-        assert(iter->second.status == TxWriteStatus::PREPUTED);
+    for (auto iter = _txrwbuffer->begin(); iter != _txrwbuffer->end(); iter++) {
+        auto& key = iter->first;
+        auto& tx_rw = iter->second;
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
-
-        brpc::Controller cntl;
-        azino::txindex::CommitRequest req;
-        azino::txindex::CommitResponse resp;
-        req.set_allocated_txid(new TxIdentifier(*_txid));
-        req.set_key(iter->first);
-        stub.Commit(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::stringstream ss;
-            LOG_CONTROLLER_ERROR(cntl, ss)
-            return Status::NetworkErr(ss.str());
+        switch (tx_rw.Type()) {
+            case SERIALIZABLE_READ:
+                sts = clean(key, tx_rw);
+                break;
+            case WRITE:
+                sts = commit(key, tx_rw);
+                break;
+            case READ:
+            default:
+                continue;
         }
 
-        LOG_SDK(cntl, req, resp, Commit_from_txindex)
-
-        switch (resp.tx_op_status().error_code()) {
-            case TxOpStatus_Code_Ok:
-                iter->second.status = TxWriteStatus::COMMITTED;
-                break;
-            default:
-                std::stringstream ss;
-                ss << " Commit key: "
-                   << iter->first
-                   //                   << " value: " <<
-                   //                   iter->second.value.ShortDebugString()
-                   << " error code: " << resp.tx_op_status().error_code()
-                   << " error message: " << resp.tx_op_status().error_message();
-                return Status::TxIndexErr(ss.str());
+        if (!sts.IsOk()) {
+            return sts;
         }
     }
     return Status::Ok();
 }
 
+Status Transaction::clean(const std::string& key, TxRW& tx_rw) {
+    azino::txindex::TxOpService_Stub stub(Route(key).channel.get());
+
+    brpc::Controller cntl;
+    azino::txindex::CleanRequest req;
+    azino::txindex::CleanResponse resp;
+    req.set_allocated_txid(new TxIdentifier(*_txid));
+    req.set_key(key);
+    stub.Clean(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        std::stringstream ss;
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
+    }
+
+    LOG_SDK(cntl, req, resp, Clean_from_txindex)
+
+    switch (resp.tx_op_status().error_code()) {
+        case TxOpStatus_Code_Ok:
+            tx_rw.Status() = NONE;
+            break;
+        default:
+            std::stringstream ss;
+            ss << " Abort key: " << key
+               << " error code: " << resp.tx_op_status().error_code()
+               << " error message: " << resp.tx_op_status().error_message();
+            return Status::TxIndexErr(ss.str());
+    }
+}
+
 Status Transaction::AbortAll() {
+    auto sts = Status::Ok();
+
     // todo: parallelize aborting
-    for (auto iter = _txwritebuffer->begin(); iter != _txwritebuffer->end();
-         iter++) {
-        if (iter->second.status == TxWriteStatus::NONE) {
+    for (auto iter = _txrwbuffer->begin(); iter != _txrwbuffer->end(); iter++) {
+        auto& key = iter->first;
+        auto& tx_rw = iter->second;
+
+        if (tx_rw.Status() < LOCKED) {
             continue;
         }
 
-        azino::txindex::TxOpService_Stub stub(Route(iter->first).channel.get());
-
-        brpc::Controller cntl;
-        azino::txindex::CleanRequest req;
-        azino::txindex::CleanResponse resp;
-        req.set_allocated_txid(new TxIdentifier(*_txid));
-        req.set_key(iter->first);
-        stub.Clean(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::stringstream ss;
-            LOG_CONTROLLER_ERROR(cntl, ss)
-            return Status::NetworkErr(ss.str());
-        }
-
-        LOG_SDK(cntl, req, resp, Clean_from_txindex)
-
-        switch (resp.tx_op_status().error_code()) {
-            case TxOpStatus_Code_Ok:
-                iter->second.status = TxWriteStatus::NONE;
-                break;
-            default:
-                std::stringstream ss;
-                ss << " Abort key: "
-                   << iter->first
-                   //                   << " value: " <<
-                   //                   iter->second.value.ShortDebugString()
-                   << " error code: " << resp.tx_op_status().error_code()
-                   << " error message: " << resp.tx_op_status().error_message();
-                return Status::TxIndexErr(ss.str());
+        sts = clean(key, tx_rw);
+        if (!sts.IsOk()) {
+            return sts;
         }
     }
     return Status::Ok();
@@ -342,55 +384,56 @@ Status Transaction::Delete(WriteOptions options, const UserKey& key) {
     return Write(options, key, true);
 }
 
+Status Transaction::write_lock(const std::string& key, TxRW& tx_rw) {
+    auto& region = Route(key);
+    azino::txindex::TxOpService_Stub stub(region.channel.get());
+    brpc::Controller cntl;
+    azino::txindex::WriteLockRequest req;
+    azino::txindex::WriteLockResponse resp;
+    req.set_key(key);
+    req.set_allocated_txid(new TxIdentifier(*_txid));
+    stub.WriteLock(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        std::stringstream ss;
+        LOG_CONTROLLER_ERROR(cntl, ss)
+        return Status::NetworkErr(ss.str());
+    }
+
+    LOG_SDK(cntl, req, resp, WriteLock_from_txindex)
+
+    switch (resp.tx_op_status().error_code()) {
+        case TxOpStatus_Code_Ok:
+            tx_rw.Status() = LOCKED;
+            break;
+        default:
+            std::stringstream ss;
+            ss << " Lock key: " << key
+               << " error code: " << resp.tx_op_status().error_code()
+               << " error message: " << resp.tx_op_status().error_message();
+            return Status::TxIndexErr(ss.str());
+    }
+}
+
 Status Transaction::Write(WriteOptions options, const UserKey& key,
                           bool is_delete, const UserValue& value) {
     BEGIN_CHECK(write);
     auto& region = Route(key);
+    auto sts = Status::Ok();
 
-    auto iter = _txwritebuffer->find(key);
     if (options.type == kAutomatic && region.pk.find(key) != region.pk.end()) {
         options.type = kPessimistic;
     }
-    if (options.type == kPessimistic &&
-        (iter == _txwritebuffer->end() ||
-         iter->second.status < TxWriteStatus::LOCKED)) {
-        // Pessimistic
-
-        azino::txindex::TxOpService_Stub stub(region.channel.get());
-
-        brpc::Controller cntl;
-        azino::txindex::WriteLockRequest req;
-        azino::txindex::WriteLockResponse resp;
-        req.set_key(key);
-        req.set_allocated_txid(new TxIdentifier(*_txid));
-        stub.WriteLock(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::stringstream ss;
-            LOG_CONTROLLER_ERROR(cntl, ss)
-            return Status::NetworkErr(ss.str());
+    auto tx_rw = TxRW(WRITE, NONE, is_delete, value);
+    if (options.type == kPessimistic) {
+        auto iter = _txrwbuffer->find(key);
+        if (iter == _txrwbuffer->end() || iter->second.Status() < LOCKED) {
+            sts = write_lock(key, tx_rw);
+            if (!sts.IsOk()) {
+                return sts;
+            }
         }
-
-        LOG_SDK(cntl, req, resp, WriteLock_from_txindex)
-
-        switch (resp.tx_op_status().error_code()) {
-            case TxOpStatus_Code_Ok:
-                _txwritebuffer->Upsert(options, key, is_delete, value);
-                iter = _txwritebuffer->find(key);
-                iter->second.status = TxWriteStatus::LOCKED;
-                break;
-            default:
-                std::stringstream ss;
-                ss << " Lock key: "
-                   << key
-                   //                   << " value: " << value
-                   //                   << " is_delete: " << is_delete
-                   << " error code: " << resp.tx_op_status().error_code()
-                   << " error message: " << resp.tx_op_status().error_message();
-                return Status::TxIndexErr(ss.str());
-        }
-    } else {
-        _txwritebuffer->Upsert(options, key, is_delete, value);
     }
+    _txrwbuffer->Upsert(key, tx_rw);
 
     return Status::Ok();
 }
@@ -531,7 +574,7 @@ Status Transaction::Scan(const UserKey& left_key, const UserKey& right_key,
 
 void Transaction::Reset() {
     _txid.reset();
-    _txwritebuffer.reset();
+    _txrwbuffer.reset();
     _route_table.clear();
 }
 }  // namespace azino

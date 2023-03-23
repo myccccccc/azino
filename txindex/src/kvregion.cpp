@@ -92,11 +92,11 @@ TxOpStatus KVRegion::Commit(const std::string& key, const TxIdentifier& txid) {
 
 TxOpStatus KVRegion::Read(const std::string& key, Value& v,
                           const TxIdentifier& txid,
-                          std::function<void()> callback) {
+                          std::function<void()> callback, bool lock) {
     int64_t start_time = butil::gettimeofday_us();
     Deps deps;
     auto bucket_num = butil::Hash(key) % FLAGS_latch_bucket_num;
-    auto sts = _kvbs[bucket_num].Read(key, v, txid, callback, deps);
+    auto sts = _kvbs[bucket_num].Read(key, v, txid, callback, deps, lock);
     DO_RW_DEP_REPORT(deps);
     _metric.RecordRead(sts, start_time);
     return sts;

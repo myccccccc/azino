@@ -12,8 +12,8 @@ extern "C" void* CallbackWrapper(void* arg) {
 namespace azino {
 namespace txindex {
 
-void MVCCValue::Lock(const TxIdentifier& txid) {
-    _lock = MVCCLock::WriteLock;
+void MVCCValue::Lock(const TxIdentifier& txid, MVCCLock type) {
+    _lock = type;
     _lock_holder.CopyFrom(txid);
 }
 void MVCCValue::Prewrite(const Value& v, const TxIdentifier& txid) {

@@ -26,8 +26,9 @@ typedef std::unordered_map<TimeStamp, TxIdentifier> ReaderMap;
 
 enum MVCCLock {
     None = 0,
-    WriteLock = 1,
-    WriteIntent = 2,
+    ReadLock = 1,
+    WriteLock = 2,
+    WriteIntent = 3,
 };
 
 class MVCCValue {
@@ -39,7 +40,7 @@ class MVCCValue {
     inline TxIdentifier LockHolder() const { return _lock_holder; }
     inline txindex::ValuePtr IntentValue() const { return _lock_value; }
     inline size_t Size() const { return _mvv.size(); }
-    void Lock(const TxIdentifier& txid);
+    void Lock(const TxIdentifier& txid, MVCCLock type);
     void Prewrite(const Value& v, const TxIdentifier& txid);
     void Clean();
     void Commit(const TxIdentifier& txid);

@@ -10,6 +10,7 @@
 #include "options.h"
 #include "range.h"
 #include "status.h"
+#include "txrwbuffer.h"
 
 #ifndef AZINO_INCLUDE_CLIENT_H
 #define AZINO_INCLUDE_CLIENT_H
@@ -21,12 +22,12 @@ class ChannelOptions;
 
 namespace azino {
 class TxIdentifier;
-class TxWriteBuffer;
+class TxRWBuffer;
 
 typedef std::unique_ptr<brpc::ChannelOptions> ChannelOptionsPtr;
 typedef std::shared_ptr<brpc::Channel> ChannelPtr;
 typedef std::unique_ptr<TxIdentifier> TxIdentifierPtr;
-typedef std::unique_ptr<TxWriteBuffer> TxWriteBufferPtr;
+typedef std::unique_ptr<TxRWBuffer> TxRWBufferPtr;
 typedef std::map<std::string, ChannelPtr> ChannelTable;
 
 typedef struct Region {
@@ -60,8 +61,12 @@ class Transaction {
     void Reset();
 
    private:
+    Status write_lock(const std::string& key, TxRW& tx_rw);
     Status Write(WriteOptions options, const UserKey& key, bool is_delete,
                  const UserValue& value = "");
+    Status preput(const std::string& key, TxRW& tx_rw);
+    Status commit(const std::string& key, TxRW& tx_rw);
+    Status clean(const std::string& key, TxRW& tx_rw);
     Status PreputAll();
     Status CommitAll();
     Status AbortAll();
@@ -72,7 +77,7 @@ class Transaction {
     ChannelTable _channel_table;
     PartitionRouteTable _route_table;
     TxIdentifierPtr _txid;
-    TxWriteBufferPtr _txwritebuffer;
+    TxRWBufferPtr _txrwbuffer;
 };
 
 }  // namespace azino

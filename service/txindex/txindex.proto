@@ -46,6 +46,7 @@ message CommitResponse {
 message ReadRequest {
   optional azino.TxIdentifier txid = 1;
   optional string key = 2;
+  optional bool lock = 3;
 }
 
 message ReadResponse {

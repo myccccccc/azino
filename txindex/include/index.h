@@ -107,7 +107,7 @@ class TxIndex {
     // has the biggest ts among all that have ts smaller than read's ts.
     virtual TxOpStatus Read(const std::string& key, Value& v,
                             const TxIdentifier& txid,
-                            std::function<void()> callback);
+                            std::function<void()> callback, bool lock);
 
    private:
     KVRegionPtr route(const std::string& key);
@@ -147,7 +147,7 @@ class KVBucket {
     TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
-                    std::function<void()> callback, Deps& deps);
+                    std::function<void()> callback, Deps& deps, bool lock);
     int GetPersisting(std::vector<txindex::DataToPersist>& datas,
                       uint64_t min_ats);
     int ClearPersisted(const std::vector<txindex::DataToPersist>& datas);
@@ -184,7 +184,7 @@ class KVRegion {
     TxOpStatus Clean(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Commit(const std::string& key, const TxIdentifier& txid);
     TxOpStatus Read(const std::string& key, Value& v, const TxIdentifier& txid,
-                    std::function<void()> callback);
+                    std::function<void()> callback, bool lock);
 
     inline std::vector<KVBucket>& KVBuckets() { return _kvbs; }
 

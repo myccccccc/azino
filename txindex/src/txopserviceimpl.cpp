@@ -29,7 +29,7 @@ void TxOpServiceImpl::WriteIntent(
               << " error code: " << sts->error_code()
               << " error message: " << sts->error_message();
 
-    if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
+    if (sts->error_code() == TxOpStatus_Code_Block) {
         done_guard.release();
         delete sts;
         return;
@@ -56,7 +56,7 @@ void TxOpServiceImpl::WriteLock(
               << " error code: " << sts->error_code()
               << " error message: " << sts->error_message();
 
-    if (sts->error_code() == TxOpStatus_Code_WriteBlock) {
+    if (sts->error_code() == TxOpStatus_Code_Block) {
         done_guard.release();
         delete sts;
         return;
@@ -109,11 +109,13 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
+    bool lock = request->lock();
     Value* v = new Value();
     TxOpStatus* sts = new TxOpStatus(
         _index->Read(request->key(), *v, request->txid(),
                      std::bind(&TxOpServiceImpl::Read, this, controller,
-                               request, response, done)));
+                               request, response, done),
+                     lock));
 
     LOG(INFO) << cntl->remote_side()
               << " tx: " << request->txid().ShortDebugString() << " read"
@@ -121,7 +123,7 @@ void TxOpServiceImpl::Read(::google::protobuf::RpcController* controller,
               << " error code: " << sts->error_code()
               << " error message: " << sts->error_message();
 
-    if (sts->error_code() == TxOpStatus_Code_ReadBlock) {
+    if (sts->error_code() == TxOpStatus_Code_Block) {
         done_guard.release();
         delete sts;
         delete v;

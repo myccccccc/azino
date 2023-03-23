@@ -19,7 +19,13 @@ DEFINE_bool(first_commit_wins, false, "first commit wins");
               << " Tx(" << mv.LockHolder().ShortDebugString() << ") "        \
               << #type;
 
-#define CHECK_WRITE_TOO_LATE(type)                                       \
+#define LOG_READ_ERROR(type)                                                 \
+    LOG(INFO) << "Tx(" << txid.ShortDebugString() << ") " << #type << " on " \
+              << "key: " << key << " blocked. "                              \
+              << "Find lock type: " << mv.LockType()                         \
+              << " Tx: " << mv.LockHolder().ShortDebugString();
+
+#define CHECK_TOO_LATE(type)                                             \
     do {                                                                 \
         auto iter = mv.LargestTSValue();                                 \
         if (iter != mv.MVV().end() &&                                    \
@@ -29,7 +35,7 @@ DEFINE_bool(first_commit_wins, false, "first commit wins");
                       << "Find largest version: "                        \
                       << iter->first.ShortDebugString()                  \
                       << " value: " << iter->second->ShortDebugString(); \
-            sts.set_error_code(TxOpStatus_Code_WriteTooLate);            \
+            sts.set_error_code(TxOpStatus_Code_TooLate);                 \
             return sts;                                                  \
         }                                                                \
     } while (0);
@@ -109,32 +115,41 @@ TxOpStatus KVBucket::Commit(const std::string& key, const TxIdentifier& txid) {
 
 TxOpStatus KVBucket::Read(const std::string& key, Value& v,
                           const TxIdentifier& txid,
-                          std::function<void()> callback, Deps& deps) {
+                          std::function<void()> callback, Deps& deps,
+                          bool lock) {
     std::lock_guard<bthread::Mutex> lck(_latch);
 
     TxOpStatus sts;
 
     MVCCValue& mv = _kvs[key].mv;
 
-    if (mv.LockType() != MVCCLock::None &&
-        mv.LockHolder().start_ts() == txid.start_ts()) {
-        sts.set_error_code(TxOpStatus_Code_NotExist);
-        LOG(ERROR) << "Tx(" << txid.ShortDebugString() << ") read on "
-                   << "key: " << key << " not exist. "
-                   << "Find it's own lock type" << mv.LockType()
-                   << " Tx: " << mv.LockHolder().ShortDebugString();
+    if (mv.LockType() == MVCCLock::WriteIntent &&
+        mv.LockHolder().start_ts() < txid.start_ts()) {
+        LOG_READ_ERROR(read)
+        sts.set_error_code(TxOpStatus_Code_Block);
+        mv.AddWaiter(callback);
         return sts;
     }
 
-    if (mv.LockType() == MVCCLock::WriteIntent &&
-        mv.LockHolder().start_ts() < txid.start_ts()) {
-        sts.set_error_code(TxOpStatus_Code_ReadBlock);
-        mv.AddWaiter(callback);
-        LOG(INFO) << "Tx(" << txid.ShortDebugString() << ") read on "
-                  << "key: " << key << " blocked. "
-                  << "Find lock type: " << mv.LockType()
-                  << " Tx: " << mv.LockHolder().ShortDebugString();
-        return sts;
+    if (lock) {
+        if (mv.LockType() != MVCCLock::None) {
+            if (mv.LockHolder().start_ts() < txid.start_ts()) {
+                // wait
+                LOG_READ_ERROR(read_lock)
+                sts.set_error_code(TxOpStatus_Code_Block);
+                mv.AddWaiter(callback);
+                return sts;
+            } else if (mv.LockHolder().start_ts() > txid.start_ts()) {
+                // wait die
+                sts.set_error_code(TxOpStatus_Code_Conflicts);
+                return sts;
+            } else {
+                // already locked
+            }
+        } else {
+            CHECK_TOO_LATE(MVCCLock::ReadLock)
+            mv.Lock(txid, MVCCLock::ReadLock);
+        }
     }
 
     if (FLAGS_enable_dep_reporter) {
@@ -261,35 +276,35 @@ TxOpStatus KVBucket::write(ValueAndMetric& vm, MVCCLock lock_type,
     TxOpStatus sts;
     MVCCValue& mv = vm.mv;
 
-    if (mv.LockType() == MVCCLock::WriteLock &&
-        lock_type == MVCCLock::WriteIntent &&
-        mv.LockHolder().start_ts() == txid.start_ts()) {
-        is_lock_update = true;
-        goto out;
-    }
-
-    if (FLAGS_first_commit_wins || lock_type == MVCCLock::WriteIntent) {
-        CHECK_WRITE_TOO_LATE(lock_type)
-    }
-
     if (mv.LockType() != MVCCLock::None) {
         if (mv.LockHolder().start_ts() < txid.start_ts()) {
+            // wait
             LOG_WRITE_ERROR(block)
             mv.AddWaiter(callback);
-            sts.set_error_code(TxOpStatus_Code_WriteBlock);
+            sts.set_error_code(TxOpStatus_Code_Block);
             return sts;
         } else if (mv.LockHolder().start_ts() > txid.start_ts()) {
+            // wait die
             LOG_WRITE_ERROR(conflict)
-            sts.set_error_code(TxOpStatus_Code_WriteConflicts);
+            sts.set_error_code(TxOpStatus_Code_Conflicts);
             return sts;
         } else {
-            LOG_WRITE_ERROR(repeated)
-            sts.set_error_code(TxOpStatus_Code_Ok);
-            return sts;
+            if (mv.LockType() < lock_type) {
+                is_lock_update = true;
+            } else {
+                // already write
+                sts.set_error_code(TxOpStatus_Code_Ok);
+                return sts;
+            }
         }
     }
 
-out:
+    if (!is_lock_update) {
+        if (FLAGS_first_commit_wins || lock_type == MVCCLock::WriteIntent) {
+            CHECK_TOO_LATE(lock_type)
+        }
+    }
+
     if (FLAGS_enable_dep_reporter) {
         CHECK_READ_WRITE_DEP(key, mv, txid, deps)
     }
@@ -299,7 +314,7 @@ out:
             mv.Prewrite(v, txid);
             break;
         case MVCCLock::WriteLock:
-            mv.Lock(txid);
+            mv.Lock(txid, MVCCLock::WriteLock);
             break;
         default:
             assert(0);
