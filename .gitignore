@@ -1,7 +1,5 @@
 build
 cmake-build-debug-
-*.pb.cc
-*.pb.h
 .idea
 .vscode
 cmake-build-debug
